@@ -1,16 +1,22 @@
 package db
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"regexp"
-	"sort"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
+
+	"github.com/hashicorp/go-multierror"
+	_ "github.com/mattn/go-sqlite3"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 import "path/filepath"
+
+const sqliteDate = "2006-01-02 15:04:05"
 
 // DB defines the hiro database api.
 type DB interface {
@@ -26,167 +32,187 @@ type Query struct {
 
 type Iterator interface {
 	Next() (*Entry, error)
+	Close() error
 }
 
-func New(dir string) DB {
-	return &db{dir: dir}
+func New(dir string) (DB, error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	} else if d, err := sql.Open("sqlite3", filepath.Join(dir, "hiro.db")); err != nil {
+		return nil, err
+	} else {
+		db := &db{DB: d}
+		return db, db.init()
+	}
 }
 
 // db implements the DB interface.
 type db struct {
-	dir string
+	*sql.DB
+}
+
+func (d *db) init() error {
+	_, err := d.Exec(`
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS groups (
+	id TEXT PRIMARY KEY,
+	name TEXT,
+	parent_id TEXT REFERENCES groups
+);
+CREATE INDEX IF NOT EXISTS parent_id ON groups(parent_id);
+
+CREATE TABLE IF NOT EXISTS entries (
+	id TEXT PRIMARY KEY,
+	start TEXT,
+	end TEXT,
+	note TEXT,
+	group_id TEXT REFERENCES groups
+);
+CREATE INDEX IF NOT EXISTS group_id ON entries(group_id);
+`)
+	return err
 }
 
 // Save is part of the db interface.
 func (d *db) Save(e *Entry) error {
+	e.Start = e.Start.UTC().Truncate(time.Second)
 	if err := e.Valid(); err != nil {
 		return err
 	}
-	e.Start = e.Start.UTC().Truncate(time.Second)
-	dir := filepath.Join(append(
-		append([]string{d.dir}, e.Group...),
-		e.Start.Format("Y2006"),
-		e.Start.Format("M01"),
-		e.Start.Format("D02"),
-	)...)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
+	if e.ID == "" {
+		e.ID = uuid.NewRandom().String()
 	}
-	name := e.Start.UTC().Format("15-04-05.json")
-	path := filepath.Join(dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	var start, end interface{}
+	if !e.Start.IsZero() {
+		start = e.Start.Format(sqliteDate)
+	}
+	if !e.End.IsZero() {
+		end = e.End.Format(sqliteDate)
+	}
+	tx, err := d.Begin()
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return json.NewEncoder(file).Encode(dbEntry{End: e.End, Note: e.Note})
+	groupID, err := groupID(tx, e.Group)
+	if err != nil {
+		return multierror.Append(err, tx.Rollback())
+	}
+	if _, err := tx.Exec(
+		"INSERT INTO entries (id, start, end, note, group_id) VALUES (?, ?, ?, ?, ?)",
+		e.ID,
+		start,
+		end,
+		e.Note,
+		groupID,
+	); err != nil {
+		return multierror.Append(err, tx.Rollback())
+	}
+	return tx.Commit()
 }
 
-type dbEntry struct {
-	End  time.Time
-	Note string
+func groupID(tx *sql.Tx, names []string) (string, error) {
+	var parentID sql.NullString
+	for _, name := range names {
+		q := "SELECT id FROM groups WHERE name = ? AND parent_id "
+		args := []interface{}{name}
+		if parentID.Valid {
+			q += "= ?"
+			args = append(args, parentID)
+		} else {
+			q += "IS NULL"
+		}
+		row := tx.QueryRow(q, args...)
+		if err := row.Scan(&parentID); err == sql.ErrNoRows {
+			id := uuid.NewRandom().String()
+			fmt.Printf("insert\n")
+			if _, err := tx.Exec("INSERT INTO groups (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
+				return "", err
+			}
+			parentID.String = id
+			parentID.Valid = true
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return parentID.String, nil
 }
 
 func (d *db) Query(q Query) (Iterator, error) {
-	return &iterator{dir: d.dir, offset: q.Start}, nil
+	rows, err := d.DB.Query("SELECT id, start, end, group_id FROM entries ORDER BY start DESC;")
+	return &iterator{db: d.DB, rows: rows}, err
 }
 
 type iterator struct {
-	dir    string
-	groups map[*iteratorGroup]*Entry
-	offset time.Time
+	db   *sql.DB
+	rows *sql.Rows
 }
 
-type iteratorGroup struct {
-	dir    string
-	offset time.Time
-	name   []string
-	years  []string
-	months []string
-	days   []string
-	files  []string
-}
-
-func (g *iteratorGroup) Next() (*Entry, error) {
-	for len(g.years) > 0 {
-		year := g.years[0]
-		if year > g.offset.Format("2006") {
-			g.years = g.years[1:]
-			continue
-		}
-		if len(g.months) == 0 {
-			infos, err := ioutil.ReadDir(filepath.Join(g.dir, "Y"+year))
-			if err != nil {
-				return nil, err
-			}
-			g.months = make([]string, 0, len(infos))
-			for _, info := range infos {
-				if !info.IsDir() {
-					continue
-				} else if name := info.Name(); !monthDir.MatchString(name) {
-					continue
-				} else if month := name[1:]; month > g.offset.Format("01") {
-					continue
-				} else {
-					g.months = append(g.months, month)
-				}
-			}
-			if len(g.months) == 0 {
-				g.years = g.years[1:]
-				continue
-			}
-			sort.Sort(sort.Reverse(sort.StringSlice(g.months)))
-		}
-		month := g.months[0]
-		fmt.Printf("%s - %s\n", year, month)
-		break
-	}
-	return nil, io.EOF
-}
-
-func (itr *iterator) Next() (*Entry, error) {
-	if itr.groups == nil {
-		itr.groups = make(map[*iteratorGroup]*Entry)
-		if err := itr.open(itr.dir, nil); err != nil {
-			return nil, err
-		}
+func (i *iterator) Next() (*Entry, error) {
+	if !i.rows.Next() {
+		return nil, io.EOF
 	}
 	var (
-		bestEntry *Entry
-		bestGroup *iteratorGroup
-		err       error
+		entry   Entry
+		start   sql.NullString
+		end     sql.NullString
+		groupID string
 	)
-	for group, entry := range itr.groups {
-		if entry == nil {
-			if entry, err = group.Next(); err == io.EOF {
-				delete(itr.groups, group)
-				continue
-			} else if err != nil {
-				return nil, err
-			}
-			itr.groups[group] = entry
-		}
-		if bestEntry == nil || entry.Start.Before(bestEntry.Start) {
-			bestEntry = entry
-			bestGroup = group
+	if err := i.rows.Scan(&entry.ID, &start, &end, &groupID); err != nil {
+		return nil, err
+	}
+	for dst, val := range map[*time.Time]sql.NullString{&entry.Start: start, &entry.End: end} {
+		if !val.Valid {
+			continue
+		} else if t, err := time.Parse(sqliteDate, val.String); err != nil {
+			return nil, err
+		} else {
+			*dst = t
 		}
 	}
-	if bestEntry != nil {
-		itr.groups[bestGroup] = nil
-		return bestEntry, nil
+	group, err := i.group(groupID)
+	if err != nil {
+		return nil, err
 	}
-	return nil, io.EOF
+	entry.Group = group
+	return &entry, i.rows.Err()
 }
 
-var (
-	yearDir  = regexp.MustCompile("^Y\\d{4}$")
-	monthDir = regexp.MustCompile("^M\\d{2}$")
-	dayDir   = regexp.MustCompile("^D\\d{2}$")
-)
-
-func (itr *iterator) open(dir string, groupName []string) error {
-	file, err := os.Open(dir)
+func (i *iterator) group(id string) ([]string, error) {
+	rows, err := i.db.Query(`
+WITH RECURSIVE
+	group_ids(group_id) AS (
+		VALUES(?)
+		UNION ALL
+		SELECT parent_id
+			FROM groups, group_ids
+			WHERE id=group_id
+	)
+SELECT groups.name
+	FROM groups, group_ids
+	WHERE group_ids.group_id = groups.id;
+`, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer file.Close()
-	if children, err := file.Readdir(0); err != nil {
-		return err
+	names := []string{}
+	fmt.Printf("%s\n", id)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append([]string{name}, names...)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	} else if err := rows.Close(); err != nil {
+		return nil, err
 	} else {
-		group := &iteratorGroup{dir: dir, name: groupName, offset: itr.offset}
-		if len(groupName) > 0 {
-			itr.groups[group] = nil
-		}
-		for _, child := range children {
-			if !child.IsDir() {
-				continue
-			} else if childName := child.Name(); yearDir.MatchString(childName) {
-				group.years = append(group.years, childName[1:])
-			} else {
-				itr.open(filepath.Join(dir, child.Name()), append(groupName, childName))
-			}
-		}
-		sort.Sort(sort.Reverse(sort.StringSlice(group.years)))
+		return names, nil
 	}
-	return nil
+}
+
+func (i *iterator) Close() error {
+	return i.Close()
 }
