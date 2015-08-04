@@ -22,12 +22,12 @@ func (e Entry) Valid() error {
 	return nil
 }
 
-func (e Entry) Duration() time.Time {
+func (e Entry) Duration(now time.Time) time.Duration {
 	end := e.End
 	if end.IsZero() {
-		end = time.Now()
+		end = now
 	}
-	return end
+	return end.Sub(e.Start)
 }
 
 func (e *Entry) Equal(o *Entry) bool {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
@@ -25,7 +26,8 @@ type DB interface {
 }
 
 type Query struct {
-	Start time.Time
+	IDs []string
+	//Start time.Time
 	// Groups [][]string
 	// Asc bool
 }
@@ -61,6 +63,7 @@ CREATE TABLE IF NOT EXISTS groups (
 	parent_id TEXT REFERENCES groups
 );
 CREATE INDEX IF NOT EXISTS parent_id ON groups(parent_id);
+CREATE UNIQUE INDEX IF NOT EXISTS name_parent_id ON groups(name, parent_id);
 
 CREATE TABLE IF NOT EXISTS entries (
 	id TEXT PRIMARY KEY,
@@ -125,7 +128,6 @@ func groupID(tx *sql.Tx, names []string) (string, error) {
 		row := tx.QueryRow(q, args...)
 		if err := row.Scan(&parentID); err == sql.ErrNoRows {
 			id := uuid.NewRandom().String()
-			fmt.Printf("insert\n")
 			if _, err := tx.Exec("INSERT INTO groups (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
 				return "", err
 			}
@@ -139,7 +141,17 @@ func groupID(tx *sql.Tx, names []string) (string, error) {
 }
 
 func (d *db) Query(q Query) (Iterator, error) {
-	rows, err := d.DB.Query("SELECT id, start, end, group_id FROM entries ORDER BY start DESC;")
+	var parts = []string{"SELECT id, start, end, group_id", "FROM entries"}
+	var args []interface{}
+	if len(q.IDs) > 0 {
+		parts = append(parts, fmt.Sprintf("WHERE id IN (?"+strings.Repeat(", ?", len(q.IDs)-1)+") "))
+		for _, id := range q.IDs {
+			args = append(args, id)
+		}
+	}
+	parts = append(parts, "ORDER BY start DESC")
+	sql := strings.Join(parts, " ")
+	rows, err := d.DB.Query(sql, args...)
 	return &iterator{db: d.DB, rows: rows}, err
 }
 
@@ -196,7 +208,6 @@ SELECT groups.name
 		return nil, err
 	}
 	names := []string{}
-	fmt.Printf("%s\n", id)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
