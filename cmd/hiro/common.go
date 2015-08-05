@@ -15,7 +15,7 @@ var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{
 	"join": strings.Join,
 }).Parse(strings.TrimSpace(`
 Id:       {{.Entry.ID}}
-Category: {{join .Entry.Group ":"}}
+Category: {{join .Entry.Category ":"}}
 Start:    {{.Entry.Start}}
 {{if not .HideEnd}}End:      {{if .Entry.End.IsZero}}{{else}}{{.End}}{{end}}
 {{end}}{{if not .HideDuration}}Duration: {{.Entry.Duration now}}
@@ -56,3 +56,7 @@ const (
 	PrintHideDuration PrintMask = 1 << (iota - 1)
 	PrintHideEnd
 )
+
+func ParseEntries(r io.Reader) ([]*db.Entry, error) {
+	return nil, nil
+}

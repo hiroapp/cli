@@ -28,7 +28,7 @@ type DB interface {
 type Query struct {
 	IDs []string
 	//Start time.Time
-	// Groups [][]string
+	// Categories [][]string
 	// Asc bool
 }
 
@@ -57,22 +57,22 @@ func (d *db) init() error {
 	_, err := d.Exec(`
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS groups (
+CREATE TABLE IF NOT EXISTS categories (
 	id TEXT PRIMARY KEY,
 	name TEXT,
-	parent_id TEXT REFERENCES groups
+	parent_id TEXT REFERENCES categories
 );
-CREATE INDEX IF NOT EXISTS parent_id ON groups(parent_id);
-CREATE UNIQUE INDEX IF NOT EXISTS name_parent_id ON groups(name, parent_id);
+CREATE INDEX IF NOT EXISTS parent_id ON categories(parent_id);
+CREATE UNIQUE INDEX IF NOT EXISTS name_parent_id ON categories(name, parent_id);
 
 CREATE TABLE IF NOT EXISTS entries (
 	id TEXT PRIMARY KEY,
 	start TEXT,
 	end TEXT,
 	note TEXT,
-	group_id TEXT REFERENCES groups
+	category_id TEXT REFERENCES categories
 );
-CREATE INDEX IF NOT EXISTS group_id ON entries(group_id);
+CREATE INDEX IF NOT EXISTS category_id ON entries(category_id);
 `)
 	return err
 }
@@ -97,27 +97,27 @@ func (d *db) Save(e *Entry) error {
 	if err != nil {
 		return err
 	}
-	groupID, err := groupID(tx, e.Group)
+	categoryID, err := categoryID(tx, e.Category)
 	if err != nil {
 		return multierror.Append(err, tx.Rollback())
 	}
 	if _, err := tx.Exec(
-		"INSERT INTO entries (id, start, end, note, group_id) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)",
 		e.ID,
 		start,
 		end,
 		e.Note,
-		groupID,
+		categoryID,
 	); err != nil {
 		return multierror.Append(err, tx.Rollback())
 	}
 	return tx.Commit()
 }
 
-func groupID(tx *sql.Tx, names []string) (string, error) {
+func categoryID(tx *sql.Tx, names []string) (string, error) {
 	var parentID sql.NullString
 	for _, name := range names {
-		q := "SELECT id FROM groups WHERE name = ? AND parent_id "
+		q := "SELECT id FROM categories WHERE name = ? AND parent_id "
 		args := []interface{}{name}
 		if parentID.Valid {
 			q += "= ?"
@@ -128,7 +128,7 @@ func groupID(tx *sql.Tx, names []string) (string, error) {
 		row := tx.QueryRow(q, args...)
 		if err := row.Scan(&parentID); err == sql.ErrNoRows {
 			id := uuid.NewRandom().String()
-			if _, err := tx.Exec("INSERT INTO groups (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
+			if _, err := tx.Exec("INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
 				return "", err
 			}
 			parentID.String = id
@@ -141,7 +141,7 @@ func groupID(tx *sql.Tx, names []string) (string, error) {
 }
 
 func (d *db) Query(q Query) (Iterator, error) {
-	var parts = []string{"SELECT id, start, end, group_id", "FROM entries"}
+	var parts = []string{"SELECT id, start, end, category_id", "FROM entries"}
 	var args []interface{}
 	if len(q.IDs) > 0 {
 		parts = append(parts, fmt.Sprintf("WHERE id IN (?"+strings.Repeat(", ?", len(q.IDs)-1)+") "))
@@ -165,12 +165,12 @@ func (i *iterator) Next() (*Entry, error) {
 		return nil, io.EOF
 	}
 	var (
-		entry   Entry
-		start   sql.NullString
-		end     sql.NullString
-		groupID string
+		entry      Entry
+		start      sql.NullString
+		end        sql.NullString
+		categoryID string
 	)
-	if err := i.rows.Scan(&entry.ID, &start, &end, &groupID); err != nil {
+	if err := i.rows.Scan(&entry.ID, &start, &end, &categoryID); err != nil {
 		return nil, err
 	}
 	for dst, val := range map[*time.Time]sql.NullString{&entry.Start: start, &entry.End: end} {
@@ -182,27 +182,27 @@ func (i *iterator) Next() (*Entry, error) {
 			*dst = t
 		}
 	}
-	group, err := i.group(groupID)
+	category, err := i.category(categoryID)
 	if err != nil {
 		return nil, err
 	}
-	entry.Group = group
+	entry.Category = category
 	return &entry, i.rows.Err()
 }
 
-func (i *iterator) group(id string) ([]string, error) {
+func (i *iterator) category(id string) ([]string, error) {
 	rows, err := i.db.Query(`
 WITH RECURSIVE
-	group_ids(group_id) AS (
+	category_ids(category_id) AS (
 		VALUES(?)
 		UNION ALL
 		SELECT parent_id
-			FROM groups, group_ids
-			WHERE id=group_id
+			FROM categories, category_ids
+			WHERE id=category_id
 	)
-SELECT groups.name
-	FROM groups, group_ids
-	WHERE group_ids.group_id = groups.id;
+SELECT categories.name
+	FROM categories, category_ids
+	WHERE category_ids.category_id = categories.id;
 `, id)
 	if err != nil {
 		return nil, err

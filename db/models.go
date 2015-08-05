@@ -6,11 +6,11 @@ import (
 )
 
 type Entry struct {
-	ID    string
-	Group []string
-	Start time.Time
-	End   time.Time
-	Note  string
+	ID       string
+	Category []string
+	Start    time.Time
+	End      time.Time
+	Note     string
 }
 
 func (e Entry) Valid() error {
@@ -36,7 +36,7 @@ func (e *Entry) Equal(o *Entry) bool {
 			e.Start.Equal(o.Start) &&
 			e.End.Equal(o.End) &&
 			e.Note == o.Note &&
-			stringSliceEqual(e.Group, o.Group))
+			stringSliceEqual(e.Category, o.Category))
 }
 
 func stringSliceEqual(a, b []string) bool {

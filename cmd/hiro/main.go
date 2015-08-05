@@ -16,8 +16,8 @@ var version string = "?"
 func main() {
 	app := cli.App("hiro", "Command line time tracking.")
 	app.Command("start", "Start a new time entry, ending the currently active one", func(cmd *cli.Cmd) {
-		group := cmd.StringArg("GROUP", "", "The group to assign to the new entry")
-		cmd.Action = func() { cmdStart(mustDB(), *group) }
+		category := cmd.StringArg("CATEGORY", "", "The category to assign to the new entry")
+		cmd.Action = func() { cmdStart(mustDB(), *category) }
 	})
 	app.Command("list", "Lists all time entries.", func(cmd *cli.Cmd) {
 		cmd.Action = func() { cmdList(mustDB()) }
@@ -45,10 +45,10 @@ func mustDB() db.DB {
 	panic("unreachable")
 }
 
-// splitGroup splits a colon separated group identifier into the names of the
-// individual groups, e.g. "Foo:Bar:Baz" into "Foo", "Bar", "Baz".
-func splitGroup(group string) []string {
-	return strings.Split(group, ":")
+// splitCategory splits a colon separated category identifier into the names of
+// the individual categories, e.g. "Foo:Bar:Baz" into "Foo", "Bar", "Baz".
+func splitCategory(category string) []string {
+	return strings.Split(category, ":")
 }
 
 func fatal(err error) {

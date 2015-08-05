@@ -10,9 +10,9 @@ import (
 	"github.com/felixge/hiro/term/editor"
 )
 
-func cmdStart(d db.DB, groupString string) {
-	group := splitGroup(groupString)
-	entry := &db.Entry{Group: group, Start: time.Now()}
+func cmdStart(d db.DB, categoryString string) {
+	category := splitCategory(categoryString)
+	entry := &db.Entry{Category: category, Start: time.Now()}
 	if err := d.Save(entry); err != nil {
 		fatal(err)
 	} else if err := FprintEntry(os.Stdout, entry, PrintHideDuration|PrintHideEnd); err != nil {
