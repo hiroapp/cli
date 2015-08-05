@@ -39,6 +39,10 @@ func (e *Entry) Equal(o *Entry) bool {
 			stringSliceEqual(e.Category, o.Category))
 }
 
+func (e *Entry) Empty() bool {
+	return e.Equal(&Entry{})
+}
+
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

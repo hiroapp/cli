@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -57,6 +59,83 @@ const (
 	PrintHideEnd
 )
 
+var entryField = regexp.MustCompile("^([^:]+):\\s*(.*?)\\s*$")
+
+const (
+	timeLayout     = "2006-01-02 15:04:05 -0700 MST"
+	entrySeparator = "8< ---------- do not remove this separator ----------- >8"
+)
+
+// ParseEntries parses entries in a, for now, poorly specified plaintext
+// format from r and returns them or an error.
+//
+// @TODO properly define the plaintext format and implement good error
+// handling.
 func ParseEntries(r io.Reader) ([]*db.Entry, error) {
-	return nil, nil
+	var (
+		entries []*db.Entry
+		entry   = &db.Entry{}
+		scanner = bufio.NewScanner(r)
+		isNote  = false
+	)
+	for {
+		var (
+			ok   = scanner.Scan()
+			line string
+		)
+		if ok {
+			line = scanner.Text()
+		}
+		fmt.Printf("ok=%t isNote=%t line=%q isSeparator=%t\n", ok, isNote, line, line == entrySeparator)
+		if !ok || line == entrySeparator {
+			isNote = false
+			entry.Note = strings.TrimSpace(entry.Note)
+			if !entry.Empty() {
+				entries = append(entries, entry)
+				entry = &db.Entry{}
+			}
+			if !ok {
+				break
+			}
+			continue
+		}
+		matches := entryField.FindStringSubmatch(line)
+		if isNote {
+			entry.Note += line + "\n"
+			continue
+		} else if line == "" {
+			if !entry.Empty() {
+				isNote = true
+			}
+			continue
+		} else if len(matches) != 3 {
+			return nil, fmt.Errorf("bad line: %q", line)
+		}
+		field, val := matches[1], matches[2]
+		switch fieldLow := strings.ToLower(field); fieldLow {
+		case "id":
+			entry.ID = val
+		case "category":
+			entry.Category = splitCategory(val)
+		case "start", "end":
+			if val == "" {
+				continue
+			}
+			tVal, err := time.Parse(timeLayout, val)
+			if err != nil {
+				return nil, err
+			}
+			if fieldLow == "start" {
+				entry.Start = tVal
+			} else {
+				entry.End = tVal
+			}
+		default:
+			return nil, fmt.Errorf("Unknown field: %s", field)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("Failed to scan: %s", err)
+	}
+	return entries, nil
 }
