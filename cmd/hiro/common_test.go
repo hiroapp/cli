@@ -49,7 +49,7 @@ This is a time entry.
 
 With a newline.
 
-8< ---------- do not remove this separator ----------- >8
+8< ----- do not remove this separator ----- >8
 
 Id:       9fc585e2-0314-4816-95fc-70e0e75f3b1d
 Category: Another Category

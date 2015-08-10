@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"time"
 
 	"github.com/felixge/hiro/db"
-	"github.com/felixge/hiro/term/editor"
+	"github.com/felixge/hiro/term"
 )
 
 func cmdStart(d db.DB, categoryString string) {
@@ -34,14 +33,18 @@ func cmdEdit(d db.DB, ids ...string) {
 	if err != nil {
 		fatal(err)
 	}
-	e := editor.New()
-	defer e.Close()
-	if err := FprintIterator(e, itr, PrintDefault); err != nil {
+	e := term.NewEditor()
+	if err := FprintIterator(e, itr, PrintSeparator|PrintHideDuration); err != nil {
 		fatal(err)
 	} else if err := e.Run(); err != nil {
 		fatal(err)
+	} else if entries, err := ParseEntries(e); err != nil {
+		fatal(err)
+	} else if err := d.Save(entries...); err != nil {
+		fatal(err)
+	} else if err := FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault); err != nil {
+		fatal(err)
 	}
-	io.Copy(os.Stdout, e)
 }
 
 func cmdVersion() {

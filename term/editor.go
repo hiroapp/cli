@@ -1,4 +1,4 @@
-package editor
+package term
 
 import (
 	"fmt"
@@ -110,7 +110,7 @@ func (e *Editor) Close() error {
 	return closeErr
 }
 
-func New() *Editor {
+func NewEditor() *Editor {
 	e := &Editor{
 		state:   editorWrite,
 		Command: os.Getenv("EDITOR"),

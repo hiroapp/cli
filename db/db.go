@@ -21,7 +21,7 @@ const sqliteDate = "2006-01-02 15:04:05"
 
 // DB defines the hiro database api.
 type DB interface {
-	Save(*Entry) error
+	Save(...*Entry) error
 	Query(Query) (Iterator, error)
 }
 
@@ -78,40 +78,48 @@ CREATE INDEX IF NOT EXISTS category_id ON entries(category_id);
 }
 
 // Save is part of the db interface.
-func (d *db) Save(e *Entry) error {
-	e.Start = e.Start.UTC().Truncate(time.Second)
-	if err := e.Valid(); err != nil {
-		return err
-	}
-	if e.ID == "" {
-		e.ID = uuid.NewRandom().String()
-	}
-	var start, end interface{}
-	if !e.Start.IsZero() {
-		start = e.Start.Format(sqliteDate)
-	}
-	if !e.End.IsZero() {
-		end = e.End.Format(sqliteDate)
-	}
+func (d *db) Save(entries ...*Entry) error {
 	tx, err := d.Begin()
 	if err != nil {
 		return err
 	}
-	categoryID, err := categoryID(tx, e.Category)
-	if err != nil {
-		return multierror.Append(err, tx.Rollback())
+	for _, e := range entries {
+		e.Start = e.Start.UTC().Truncate(time.Second)
+		if err = e.Valid(); err != nil {
+			break
+		}
+		var insert bool
+		if insert = e.ID == ""; insert {
+			e.ID = uuid.NewRandom().String()
+		}
+		var start, end interface{}
+		if !e.Start.IsZero() {
+			start = e.Start.Format(sqliteDate)
+		}
+		if !e.End.IsZero() {
+			end = e.End.Format(sqliteDate)
+		}
+		var cID string
+		cID, err = categoryID(tx, e.Category)
+		if err != nil {
+			break
+		}
+		q := "INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)"
+		args := []interface{}{e.ID, start, end, e.Note, cID}
+		if !insert {
+			q = "UPDATE entries SET id=?, start=?, end=?, note=?, category_id=? WHERE id=?"
+			args = append(args, e.ID)
+		}
+		if _, err = tx.Exec(q, args...); err != nil {
+			break
+		}
 	}
-	if _, err := tx.Exec(
-		"INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)",
-		e.ID,
-		start,
-		end,
-		e.Note,
-		categoryID,
-	); err != nil {
-		return multierror.Append(err, tx.Rollback())
+	if err == nil {
+		return tx.Commit()
+	} else if rErr := tx.Rollback(); rErr != nil {
+		return multierror.Append(err, rErr)
 	}
-	return tx.Commit()
+	return err
 }
 
 func categoryID(tx *sql.Tx, names []string) (string, error) {
@@ -141,7 +149,7 @@ func categoryID(tx *sql.Tx, names []string) (string, error) {
 }
 
 func (d *db) Query(q Query) (Iterator, error) {
-	var parts = []string{"SELECT id, start, end, category_id", "FROM entries"}
+	var parts = []string{"SELECT id, start, end, note, category_id", "FROM entries"}
 	var args []interface{}
 	if len(q.IDs) > 0 {
 		parts = append(parts, fmt.Sprintf("WHERE id IN (?"+strings.Repeat(", ?", len(q.IDs)-1)+") "))
@@ -170,7 +178,7 @@ func (i *iterator) Next() (*Entry, error) {
 		end        sql.NullString
 		categoryID string
 	)
-	if err := i.rows.Scan(&entry.ID, &start, &end, &categoryID); err != nil {
+	if err := i.rows.Scan(&entry.ID, &start, &end, &entry.Note, &categoryID); err != nil {
 		return nil, err
 	}
 	for dst, val := range map[*time.Time]sql.NullString{&entry.Start: start, &entry.End: end} {

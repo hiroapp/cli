@@ -2,8 +2,40 @@ package db
 
 import (
 	"errors"
+	"io"
 	"time"
 )
+
+func EntryIterator(entries []*Entry) Iterator {
+	i := entryIterator(entries)
+	return &i
+}
+
+type entryIterator []*Entry
+
+func (m *entryIterator) Next() (*Entry, error) {
+	if len(*m) == 0 {
+		return nil, io.EOF
+	}
+	e := (*m)[0]
+	*m = (*m)[1:]
+	return e, nil
+}
+func (m entryIterator) Close() error { return nil }
+
+func IteratorEntries(itr Iterator) ([]*Entry, error) {
+	var entries []*Entry
+	defer itr.Close()
+	for {
+		if entry, err := itr.Next(); err == io.EOF {
+			return entries, nil
+		} else if err != nil {
+			return entries, err
+		} else {
+			entries = append(entries, entry)
+		}
+	}
+}
 
 type Entry struct {
 	ID       string

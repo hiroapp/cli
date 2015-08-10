@@ -22,13 +22,15 @@ Start:    {{.Entry.Start}}
 {{if not .HideEnd}}End:      {{if .Entry.End.IsZero}}{{else}}{{.End}}{{end}}
 {{end}}{{if not .HideDuration}}Duration: {{.Entry.Duration now}}
 {{end}}
+{{if .Entry.Note}}{{.Entry.Note}}
+{{end}}
 `)))
 
 func FprintEntry(w io.Writer, e *db.Entry, m PrintMask) error {
 	return tmpl.Execute(w, map[string]interface{}{
 		"Entry":        e,
-		"HideDuration": m & PrintHideDuration,
-		"HideEnd":      m & PrintHideEnd,
+		"HideDuration": m&PrintHideDuration > 0,
+		"HideEnd":      m&PrintHideEnd > 0,
 	})
 }
 
@@ -40,7 +42,11 @@ func FprintIterator(w io.Writer, itr db.Iterator, m PrintMask) error {
 			return err
 		} else {
 			if !first {
-				if _, err := fmt.Fprintf(w, "\n"); err != nil {
+				separator := "\n"
+				if m&PrintSeparator > 0 {
+					separator += entrySeparator + "\n\n"
+				}
+				if _, err := fmt.Fprintf(w, "%s", separator); err != nil {
 					return err
 				}
 			}
@@ -57,13 +63,14 @@ const (
 	PrintDefault      PrintMask = 0
 	PrintHideDuration PrintMask = 1 << (iota - 1)
 	PrintHideEnd
+	PrintSeparator
 )
 
 var entryField = regexp.MustCompile("^([^:]+):\\s*(.*?)\\s*$")
 
 const (
 	timeLayout     = "2006-01-02 15:04:05 -0700 MST"
-	entrySeparator = "8< ---------- do not remove this separator ----------- >8"
+	entrySeparator = "8< ----- do not remove this separator ----- >8"
 )
 
 // ParseEntries parses entries in a, for now, poorly specified plaintext
@@ -86,7 +93,6 @@ func ParseEntries(r io.Reader) ([]*db.Entry, error) {
 		if ok {
 			line = scanner.Text()
 		}
-		fmt.Printf("ok=%t isNote=%t line=%q isSeparator=%t\n", ok, isNote, line, line == entrySeparator)
 		if !ok || line == entrySeparator {
 			isNote = false
 			entry.Note = strings.TrimSpace(entry.Note)
