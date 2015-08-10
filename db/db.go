@@ -160,7 +160,7 @@ func (d *db) Query(q Query) (Iterator, error) {
 			args = append(args, id)
 		}
 	}
-	parts = append(parts, "ORDER BY start DESC")
+	parts = append(parts, "ORDER BY DATETIME(start, 'utc') DESC")
 	sql := strings.Join(parts, " ")
 	rows, err := d.DB.Query(sql, args...)
 	return &iterator{db: d.DB, rows: rows}, err
