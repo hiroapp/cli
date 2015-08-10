@@ -17,7 +17,9 @@ import (
 )
 import "path/filepath"
 
-const sqliteDate = "2006-01-02 15:04:05"
+const (
+	datetimeLayout = "2006-01-02 15:04:05 -07:00"
+)
 
 // DB defines the hiro database api.
 type DB interface {
@@ -84,7 +86,8 @@ func (d *db) Save(entries ...*Entry) error {
 		return err
 	}
 	for _, e := range entries {
-		e.Start = e.Start.UTC().Truncate(time.Second)
+		e.Start = e.Start.Truncate(time.Second)
+		e.End = e.End.Truncate(time.Second)
 		if err = e.Valid(); err != nil {
 			break
 		}
@@ -94,10 +97,10 @@ func (d *db) Save(entries ...*Entry) error {
 		}
 		var start, end interface{}
 		if !e.Start.IsZero() {
-			start = e.Start.Format(sqliteDate)
+			start = e.Start.Format(datetimeLayout)
 		}
 		if !e.End.IsZero() {
-			end = e.End.Format(sqliteDate)
+			end = e.End.Format(datetimeLayout)
 		}
 		var cID string
 		cID, err = categoryID(tx, e.Category)
@@ -184,7 +187,7 @@ func (i *iterator) Next() (*Entry, error) {
 	for dst, val := range map[*time.Time]sql.NullString{&entry.Start: start, &entry.End: end} {
 		if !val.Valid {
 			continue
-		} else if t, err := time.Parse(sqliteDate, val.String); err != nil {
+		} else if t, err := time.Parse(datetimeLayout, val.String); err != nil {
 			return nil, err
 		} else {
 			*dst = t

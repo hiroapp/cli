@@ -15,11 +15,14 @@ import (
 var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{
 	"now":  func() time.Time { return time.Now().Truncate(time.Second) },
 	"join": strings.Join,
+	"format": func(t time.Time) string {
+		return t.Format(timeLayout)
+	},
 }).Parse(strings.TrimSpace(`
 Id:       {{.Entry.ID}}
 Category: {{join .Entry.Category ":"}}
-Start:    {{.Entry.Start}}
-{{if not .HideEnd}}End:      {{if .Entry.End.IsZero}}{{else}}{{.End}}{{end}}
+Start:    {{format .Entry.Start}}
+{{if not .HideEnd}}End:      {{if .Entry.End.IsZero}}{{else}}{{format .Entry.End}}{{end}}
 {{end}}{{if not .HideDuration}}Duration: {{.Entry.Duration now}}
 {{end}}
 {{if .Entry.Note}}{{.Entry.Note}}
@@ -69,7 +72,7 @@ const (
 var entryField = regexp.MustCompile("^([^:]+):\\s*(.*?)\\s*$")
 
 const (
-	timeLayout     = "2006-01-02 15:04:05 -0700 MST"
+	timeLayout     = "2006-01-02 15:04:05 -0700"
 	entrySeparator = "8< ----- do not remove this separator ----- >8"
 )
 
