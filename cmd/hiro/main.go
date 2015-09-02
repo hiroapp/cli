@@ -23,9 +23,8 @@ func main() {
 		cmd.Action = func() { cmdList(mustDB()) }
 	})
 	app.Command("edit", "Edit time entry", func(cmd *cli.Cmd) {
-		id := cmd.StringsArg("ID", nil, "The id of the entry to edit")
-		cmd.Action = func() { cmdEdit(mustDB(), *id...) }
-		cmd.Spec = "ID..."
+		id := cmd.StringArg("ID", "", "The id of the entry to edit")
+		cmd.Action = func() { cmdEdit(mustDB(), *id) }
 	})
 	app.Command("version", "Prints the version", func(cmd *cli.Cmd) {
 		cmd.Action = cmdVersion

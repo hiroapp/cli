@@ -28,8 +28,8 @@ func cmdList(d db.DB) {
 	}
 }
 
-func cmdEdit(d db.DB, ids ...string) {
-	itr, err := d.Query(db.Query{IDs: ids})
+func cmdEdit(d db.DB, id string) {
+	itr, err := d.Query(db.Query{IDs: []string{id}})
 	if err != nil {
 		fatal(err)
 	}
@@ -40,7 +40,11 @@ func cmdEdit(d db.DB, ids ...string) {
 		fatal(err)
 	} else if entries, err := ParseEntries(e); err != nil {
 		fatal(err)
-	} else if err := d.Save(entries...); err != nil {
+	} else if l := len(entries); l == 0 {
+		return
+	} else if l > 1 {
+		fatal(fmt.Errorf("editing multiple entries is not supported yet"))
+	} else if err := d.Save(entries[0]); err != nil {
 		fatal(err)
 	} else if err := FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault); err != nil {
 		fatal(err)
