@@ -33,13 +33,19 @@ type DB interface {
 }
 
 type Query struct {
+	// IDs returns entries matching the given ids if set.
 	IDs []string
+	// Asc returns entries in ascending order if true.
 	Asc bool
+	// Active returns entries without an end time if true.
+	Active bool
 	//Start time.Time
 	// Categories [][]string
 }
 
 type Iterator interface {
+	// Next returns the next entry or an error. An io.EOF is returned after the
+	// last entry.
 	Next() (*Entry, error)
 	Close() error
 }
@@ -157,14 +163,24 @@ func categoryID(tx *sql.Tx, names []string) (string, error) {
 	return parentID.String, nil
 }
 
+// @TODO test
 func (d *db) Query(q Query) (Iterator, error) {
 	var parts = []string{"SELECT id, start, end, note, category_id", "FROM entries"}
-	var args []interface{}
+	var (
+		args  []interface{}
+		where []string
+	)
 	if len(q.IDs) > 0 {
-		parts = append(parts, fmt.Sprintf("WHERE id IN (?"+strings.Repeat(", ?", len(q.IDs)-1)+") "))
+		where = append(where, fmt.Sprintf("id IN (?"+strings.Repeat(", ?", len(q.IDs)-1)+") "))
 		for _, id := range q.IDs {
 			args = append(args, id)
 		}
+	}
+	if q.Active {
+		where = append(where, "end IS NULL")
+	}
+	if len(where) > 0 {
+		parts = append(parts, "WHERE "+strings.Join(where, " AND "))
 	}
 	order := "DESC"
 	if q.Asc == true {

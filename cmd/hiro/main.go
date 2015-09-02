@@ -19,6 +19,9 @@ func main() {
 		category := cmd.StringArg("CATEGORY", "", "The category to assign to the new entry")
 		cmd.Action = func() { cmdStart(mustDB(), *category) }
 	})
+	app.Command("end", "End the currently active entry", func(cmd *cli.Cmd) {
+		cmd.Action = func() { cmdEnd(mustDB()) }
+	})
 	app.Command("list", "Lists all time entries.", func(cmd *cli.Cmd) {
 		cmd.Action = func() { cmdList(mustDB()) }
 	})
