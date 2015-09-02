@@ -23,15 +23,20 @@ const (
 
 // DB defines the hiro database api.
 type DB interface {
-	Save(...*Entry) error
+	// Save normalizes, validates and saves the given entry or returns an error.
+	Save(*Entry) error
+	// Query returns an Iterator that lists all entries matched by the given
+	// query, or an error. Callers are required to call Close() on the iterator.
 	Query(Query) (Iterator, error)
+	// Close closes the database.
+	Close() error
 }
 
 type Query struct {
 	IDs []string
+	Asc bool
 	//Start time.Time
 	// Categories [][]string
-	// Asc bool
 }
 
 type Iterator interface {
@@ -80,32 +85,32 @@ CREATE INDEX IF NOT EXISTS category_id ON entries(category_id);
 }
 
 // Save is part of the db interface.
-func (d *db) Save(entries ...*Entry) error {
+func (d *db) Save(e *Entry) error {
 	tx, err := d.Begin()
 	if err != nil {
 		return err
 	}
-	for _, e := range entries {
+	save := func() error {
 		e.Start = e.Start.Truncate(time.Second)
 		e.End = e.End.Truncate(time.Second)
 		if err = e.Valid(); err != nil {
-			break
+			return err
 		}
 		var insert bool
 		if insert = e.ID == ""; insert {
 			e.ID = uuid.NewRandom().String()
 		}
 		var start, end interface{}
-		if !e.Start.IsZero() {
-			start = e.Start.Format(datetimeLayout)
-		}
+		start = e.Start.Format(datetimeLayout)
 		if !e.End.IsZero() {
 			end = e.End.Format(datetimeLayout)
 		}
-		var cID string
-		cID, err = categoryID(tx, e.Category)
-		if err != nil {
-			break
+		var cID interface{}
+		if len(e.Category) > 0 {
+			cID, err = categoryID(tx, e.Category)
+			if err != nil {
+				return err
+			}
 		}
 		q := "INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)"
 		args := []interface{}{e.ID, start, end, e.Note, cID}
@@ -114,10 +119,11 @@ func (d *db) Save(entries ...*Entry) error {
 			args = append(args, e.ID)
 		}
 		if _, err = tx.Exec(q, args...); err != nil {
-			break
+			return err
 		}
+		return nil
 	}
-	if err == nil {
+	if err := save(); err == nil {
 		return tx.Commit()
 	} else if rErr := tx.Rollback(); rErr != nil {
 		return multierror.Append(err, rErr)
@@ -160,10 +166,18 @@ func (d *db) Query(q Query) (Iterator, error) {
 			args = append(args, id)
 		}
 	}
-	parts = append(parts, "ORDER BY DATETIME(start, 'utc') DESC")
+	order := "DESC"
+	if q.Asc == true {
+		order = "ASC"
+	}
+	parts = append(parts, "ORDER BY DATETIME(start, 'utc') "+order)
 	sql := strings.Join(parts, " ")
 	rows, err := d.DB.Query(sql, args...)
 	return &iterator{db: d.DB, rows: rows}, err
+}
+
+func (d *db) Close() error {
+	return d.DB.Close()
 }
 
 type iterator struct {
@@ -179,7 +193,7 @@ func (i *iterator) Next() (*Entry, error) {
 		entry      Entry
 		start      sql.NullString
 		end        sql.NullString
-		categoryID string
+		categoryID sql.NullString
 	)
 	if err := i.rows.Scan(&entry.ID, &start, &end, &entry.Note, &categoryID); err != nil {
 		return nil, err
@@ -193,11 +207,13 @@ func (i *iterator) Next() (*Entry, error) {
 			*dst = t
 		}
 	}
-	category, err := i.category(categoryID)
-	if err != nil {
-		return nil, err
+	if categoryID.Valid {
+		category, err := i.category(categoryID.String)
+		if err != nil {
+			return nil, err
+		}
+		entry.Category = category
 	}
-	entry.Category = category
 	return &entry, i.rows.Err()
 }
 
@@ -236,5 +252,5 @@ SELECT categories.name
 }
 
 func (i *iterator) Close() error {
-	return i.Close()
+	return i.rows.Close()
 }

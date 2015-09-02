@@ -47,9 +47,9 @@ type Entry struct {
 
 func (e Entry) Valid() error {
 	if e.Start.IsZero() {
-		return errors.New("start time is required")
-	} else if !e.End.IsZero() && e.End.Before(e.Start) {
-		return errors.New("end time must be after start time")
+		return errors.New("start is required")
+	} else if !e.End.IsZero() && !e.End.After(e.Start) {
+		return errors.New("end must be after start")
 	}
 	return nil
 }
