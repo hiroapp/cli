@@ -17,6 +17,22 @@ const (
 	Year
 )
 
+// Add adds the interval to t and returns it.
+func (i Interval) Add(t time.Time) time.Time {
+	switch i {
+	case Day:
+		return t.AddDate(0, 0, 1)
+	case Week:
+		return t.AddDate(0, 0, 7)
+	case Month:
+		return t.AddDate(0, 1, 0)
+	case Year:
+		return t.AddDate(1, 0, 0)
+	default:
+		panic("invalid interval")
+	}
+}
+
 func ParseInterval(s string) (Interval, error) {
 	switch strings.ToLower(s) {
 	case "":
@@ -60,20 +76,8 @@ func (i *IntervalIterator) Next() (TimeRange, error) {
 	var (
 		zone = time.FixedZone(i.from.Zone())
 		from = time.Date(i.from.Year(), i.from.Month(), i.from.Day(), 0, 0, 0, 0, zone)
-		to   time.Time
+		to   = i.interval.Add(from)
 	)
-	switch i.interval {
-	case Day:
-		to = from.AddDate(0, 0, 1)
-	case Week:
-		to = from.AddDate(0, 0, 7)
-	case Month:
-		to = from.AddDate(0, 1, 0)
-	case Year:
-		to = from.AddDate(1, 0, 0)
-	default:
-		panic("unreachable")
-	}
 	i.from = to
 	return TimeRange{From: from, To: to.Add(-time.Nanosecond)}, nil
 }
