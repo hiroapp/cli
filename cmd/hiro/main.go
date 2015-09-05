@@ -29,6 +29,12 @@ func main() {
 		id := cmd.StringArg("ID", "", "The id of the entry to edit")
 		cmd.Action = func() { cmdEdit(mustDB(), *id) }
 	})
+	app.Command("summary", "Summarize time entries", func(cmd *cli.Cmd) {
+		duration := cmd.StringOpt("duration", "day", "Summary period")
+		asc := cmd.BoolOpt("asc", false, "Summary order")
+		firstDay := cmd.StringOpt("firstDay", "Monday", "First day of the week")
+		cmd.Action = func() { cmdSummary(mustDB(), *duration, *firstDay, *asc) }
+	})
 	app.Command("version", "Prints the version", func(cmd *cli.Cmd) {
 		cmd.Action = cmdVersion
 	})

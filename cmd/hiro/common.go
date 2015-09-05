@@ -148,3 +148,11 @@ func ParseEntries(r io.Reader) ([]*db.Entry, error) {
 	}
 	return entries, nil
 }
+
+func Indent(s, indent string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = indent + line
+	}
+	return strings.Join(lines, "\n")
+}

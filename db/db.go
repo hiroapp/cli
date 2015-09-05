@@ -39,7 +39,10 @@ type Query struct {
 	Asc bool
 	// Active returns entries without an end time if true.
 	Active bool
-	//Start time.Time
+	// StartFrom returns entries with start time that is greater or equal.
+	StartFrom time.Time
+	// StartTo returns entries with start time that is less or equal.
+	StartTo time.Time
 	// Categories [][]string
 }
 
@@ -178,6 +181,14 @@ func (d *db) Query(q Query) (Iterator, error) {
 	}
 	if q.Active {
 		where = append(where, "end IS NULL")
+	}
+	if !q.StartFrom.IsZero() {
+		where = append(where, "DATETIME(start, 'utc') >= ?")
+		args = append(args, q.StartFrom.UTC())
+	}
+	if !q.StartTo.IsZero() {
+		where = append(where, "DATETIME(start, 'utc') <= ?")
+		args = append(args, q.StartTo.UTC())
 	}
 	if len(where) > 0 {
 		parts = append(parts, "WHERE "+strings.Join(where, " AND "))
