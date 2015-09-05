@@ -2,7 +2,26 @@
 // dates and times.
 package datetime
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+func ParseDuration(s string) (Duration, error) {
+	switch strings.ToLower(s) {
+	case "day":
+		return Day, nil
+	case "week":
+		return Week, nil
+	case "month":
+		return Month, nil
+	case "year":
+		return Year, nil
+	default:
+		return 0, fmt.Errorf("bad duration: %s", s)
+	}
+}
 
 type Duration int
 
@@ -75,4 +94,26 @@ func (i *Iterator) Next() (time.Time, time.Time) {
 	}
 	i.cursor = next
 	return from, to
+}
+
+func ParseWeekday(s string) (time.Weekday, error) {
+	switch strings.ToLower(s) {
+	case "monday":
+		return time.Monday, nil
+	case "tuesday":
+		return time.Tuesday, nil
+	case "wednesday":
+		return time.Wednesday, nil
+	case "thursday":
+		return time.Thursday, nil
+	case "friday":
+		return time.Friday, nil
+	case "saturday":
+		return time.Saturday, nil
+	case "sunday":
+		return time.Sunday, nil
+	default:
+		return 0, fmt.Errorf("bad weekday: %s", s)
+	}
+
 }
