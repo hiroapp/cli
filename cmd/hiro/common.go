@@ -128,7 +128,7 @@ func ParseEntries(r io.Reader) ([]*db.Entry, error) {
 		case "id":
 			entry.ID = val
 		case "category":
-			entry.Category = splitCategory(val)
+			entry.Category = ParseCategory(val)
 		case "start", "end":
 			if val == "" {
 				continue
@@ -204,4 +204,14 @@ func FormatSummaryHeadline(from, to time.Time, duration datetime.Duration) strin
 	default:
 		panic("not implemeneted")
 	}
+}
+
+// ParseCategory splits a colon separated category identifier into a string
+// slice containing the individual parts, e.g. "Foo:Bar:Baz" into "Foo", "Bar",
+// "Baz". The empty category string maps to nil.
+func ParseCategory(category string) []string {
+	if category == "" {
+		return nil
+	}
+	return strings.Split(category, ":")
 }

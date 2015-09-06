@@ -19,7 +19,7 @@ func cmdStart(d db.DB, resume bool, categoryS string) {
 		fatal(err)
 	}
 	now := time.Now()
-	category := splitCategory(categoryS)
+	category := ParseCategory(categoryS)
 	entry := &db.Entry{Category: category, Start: now}
 	if resume {
 		last, err := Last(d)
@@ -99,8 +99,7 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 }
 
 func cmdLs(d db.DB, categoryS string, asc bool) {
-	category := splitCategory(categoryS)
-	itr, err := d.Query(db.Query{Asc: asc, Category: category})
+	itr, err := d.Query(db.Query{Asc: asc, Category: ParseCategory(categoryS)})
 	if err != nil {
 		fatal(err)
 	} else if err := FprintIterator(os.Stdout, itr, PrintDefault); err != nil {

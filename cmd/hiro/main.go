@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/hiroapp/cli/db"
 	"github.com/jawher/mow.cli"
@@ -61,15 +60,6 @@ func mustDB() db.DB {
 		return d
 	}
 	panic("unreachable")
-}
-
-// splitCategory splits a colon separated category identifier into the names of
-// the individual categories, e.g. "Foo:Bar:Baz" into "Foo", "Bar", "Baz".
-func splitCategory(category string) []string {
-	if category == "" {
-		return nil
-	}
-	return strings.Split(category, ":")
 }
 
 func fatal(err error) {
