@@ -227,6 +227,7 @@ func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
 	day := &ReportDay{}
 	day.From, day.To = dayItr.Next()
 	report.Days = append([]*ReportDay{day}, report.Days...)
+	noteAssigned := false
 
 outer:
 	for {
@@ -235,6 +236,13 @@ outer:
 			overlap = entry.PartialDuration(now, day.From, day.To)
 			if overlap > 0 {
 				day.Tracked += overlap
+				if !noteAssigned {
+					note := strings.Trim(entry.Note, "\n")
+					if note != "" {
+						day.Notes = append(day.Notes, note)
+					}
+					noteAssigned = true
+				}
 			}
 			if !entry.Start.Before(day.From) {
 				entry, err = entryItr.Next()
@@ -244,6 +252,7 @@ outer:
 				} else if err != nil {
 					fatal(err)
 				}
+				noteAssigned = false
 				continue
 			}
 			day = &ReportDay{}

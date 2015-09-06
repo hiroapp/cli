@@ -226,6 +226,7 @@ func FormatReport(r *Report) string {
 	buf.WriteString("\n\n")
 	t := table.New()
 	t.Add(
+		table.String("DATE"),
 		table.String("DAY"),
 		table.String("TIME"),
 		table.String("TOTAL"),
@@ -233,17 +234,28 @@ func FormatReport(r *Report) string {
 	var trackedTotal time.Duration
 	for _, day := range r.Days {
 		trackedTotal += day.Tracked
-		dayS := day.From.Format("2006-01-02 (Monday)")
 		trackedS := FormatDuration(day.Tracked)
 		trackedTotalS := FormatDuration(trackedTotal)
+		// @TODO add better padding support to table
 		t.Add(
-			table.String(dayS),
-			table.String(trackedS).Align(table.Right),
+			table.String(day.From.Format("2006-01-02 ")),
+			table.String(day.From.Format("Mon ")),
+			table.String(trackedS+" ").Align(table.Right),
 			table.String(trackedTotalS).Align(table.Right),
 		)
 	}
 	buf.WriteString(Indent(t.String(), "  "))
 	buf.WriteString("\n\n")
+	for _, day := range r.Days {
+		if day.Tracked == 0 {
+			continue
+		}
+		trackedS := FormatDuration(day.Tracked)
+		dayS := day.From.Format("2006-01-02 (Monday)")
+		fmt.Fprintf(buf, "%s - %s\n\n", dayS, trackedS)
+		buf.WriteString(Indent(strings.Join(day.Notes, "\n"), "  "))
+		buf.WriteString("\n\n")
+	}
 	return buf.String()
 }
 
