@@ -16,8 +16,10 @@ var version string = "?"
 func main() {
 	app := cli.App("hiro", "Command line time tracking.")
 	app.Command("start", "Start a new time entry, ending the currently active one", func(cmd *cli.Cmd) {
+		resume := cmd.BoolOpt("resume", false, "Default end time and category of previous entry")
 		category := cmd.StringArg("CATEGORY", "", "The category to assign to the new entry")
-		cmd.Action = func() { cmdStart(mustDB(), *category) }
+		cmd.Spec = "CATEGORY | --resume [CATEGORY]"
+		cmd.Action = func() { cmdStart(mustDB(), *resume, *category) }
 	})
 	app.Command("end", "End the currently active entry", func(cmd *cli.Cmd) {
 		cmd.Action = func() { cmdEnd(mustDB()) }

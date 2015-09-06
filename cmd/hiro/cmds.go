@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,14 +13,28 @@ import (
 	"github.com/hiroapp/cli/term"
 )
 
-func cmdStart(d db.DB, categoryString string) {
+func cmdStart(d db.DB, resume bool, categoryS string) {
 	entries, err := active(d)
 	if err != nil {
 		fatal(err)
 	}
 	now := time.Now()
-	category := splitCategory(categoryString)
+	category := splitCategory(categoryS)
 	entry := &db.Entry{Category: category, Start: now}
+	if resume {
+		last, err := Last(d)
+		if err == io.EOF {
+			fatal(errors.New("can't resume, no entries"))
+		} else if err != nil {
+			fatal(err)
+		}
+		if !last.End.IsZero() {
+			entry.Start = last.End
+		}
+		if categoryS == "" {
+			entry.Category = last.Category
+		}
+	}
 	if err := d.Save(entry); err != nil {
 		fatal(err)
 	} else if err := FprintEntry(os.Stdout, entry, PrintHideDuration|PrintHideEnd); err != nil {
@@ -34,6 +49,15 @@ func cmdEnd(d db.DB) {
 		fatal(err)
 	} else if err := endAt(d, entries, time.Now()); err != nil {
 		fatal(err)
+	}
+}
+
+// Last returns the last entry or an error.
+func Last(d db.DB) (*db.Entry, error) {
+	if itr, err := d.Query(db.Query{Active: true}); err != nil {
+		return nil, err
+	} else {
+		return itr.Next()
 	}
 }
 
