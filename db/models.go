@@ -62,6 +62,25 @@ func (e Entry) Duration(now time.Time) time.Duration {
 	return end.Sub(e.Start)
 }
 
+// PartialDuration returns the duration of the entry that
+// overlaps with the given from and to time.
+func (e Entry) PartialDuration(now, from, to time.Time) time.Duration {
+	if from.Before(e.Start) {
+		from = e.Start
+	}
+	end := e.End
+	if end.IsZero() {
+		end = now
+	}
+	if to.After(end) {
+		to = end
+	}
+	if from.After(to) {
+		return 0
+	}
+	return to.Sub(from)
+}
+
 func (e *Entry) Equal(o *Entry) bool {
 	return e == o ||
 		(e.ID == o.ID &&

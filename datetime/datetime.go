@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// ParseDuration returns the Duration for s, or an error.
 func ParseDuration(s string) (Duration, error) {
 	switch strings.ToLower(s) {
 	case "day":
@@ -23,12 +24,19 @@ func ParseDuration(s string) (Duration, error) {
 	}
 }
 
+// Duration holds a calendar duration unit which does not
+// have a fixed time.Duration due to leap seconds, leap
+// years, days per month, etc.
 type Duration int
 
 const (
+	// Day represents a calendar day.
 	Day Duration = iota
+	// Day represents a calendar week.
 	Week
+	// Month represents a calendar month.
 	Month
+	// Year represents a calendar year.
 	Year
 )
 

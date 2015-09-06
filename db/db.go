@@ -12,8 +12,6 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	_ "github.com/mattn/go-sqlite3"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 import "path/filepath"
 
