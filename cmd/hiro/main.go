@@ -31,6 +31,10 @@ func main() {
 		id := cmd.StringArg("ID", "", "The id of the entry to edit")
 		cmd.Action = func() { cmdEdit(mustDB(), *id) }
 	})
+	app.Command("rm", "Remove time entry", func(cmd *cli.Cmd) {
+		id := cmd.StringArg("ID", "", "The id of the entry to remove")
+		cmd.Action = func() { cmdRm(mustDB(), *id) }
+	})
 	app.Command("summary", "Summarize time entries", func(cmd *cli.Cmd) {
 		duration := cmd.StringOpt("duration", "day", "Summary period")
 		asc := cmd.BoolOpt("asc", false, "Summary order")

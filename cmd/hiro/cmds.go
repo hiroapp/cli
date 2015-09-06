@@ -54,11 +54,12 @@ func cmdEnd(d db.DB) {
 
 // Last returns the last entry or an error.
 func Last(d db.DB) (*db.Entry, error) {
-	if itr, err := d.Query(db.Query{Active: true}); err != nil {
+	itr, err := d.Query(db.Query{Active: true})
+	if err != nil {
 		return nil, err
-	} else {
-		return itr.Next()
 	}
+	defer itr.Close()
+	return itr.Next()
 }
 
 func active(d db.DB) ([]*db.Entry, error) {
@@ -109,6 +110,24 @@ func cmdEdit(d db.DB, id string) {
 	} else if err := d.Save(entries[0]); err != nil {
 		fatal(err)
 	} else if err := FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault); err != nil {
+		fatal(err)
+	}
+}
+
+func cmdRm(d db.DB, id string) {
+	itr, err := d.Query(db.Query{IDs: []string{id}})
+	if err != nil {
+		fatal(err)
+	}
+	if entry, err := itr.Next(); err == io.EOF {
+		fatal(fmt.Errorf("entry does not exist: %s", id))
+	} else if err != nil {
+		fatal(err)
+	} else if err := itr.Close(); err != nil {
+		fatal(err)
+	} else if err := d.Remove(id); err != nil {
+		fatal(err)
+	} else if err := FprintEntry(os.Stdout, entry, PrintDefault); err != nil {
 		fatal(err)
 	}
 }

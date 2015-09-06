@@ -26,6 +26,9 @@ type DB interface {
 	// Query returns an Iterator that lists all entries matched by the given
 	// query, or an error. Callers are required to call Close() on the iterator.
 	Query(Query) (Iterator, error)
+	// Remove deletes the entry with the given id from the db or returns an
+	// error.
+	Remove(string) error
 	// Close closes the database.
 	Close() error
 }
@@ -278,4 +281,9 @@ SELECT categories.name
 
 func (i *iterator) Close() error {
 	return i.rows.Close()
+}
+
+func (d *db) Remove(id string) error {
+	_, err := d.Exec("DELETE FROM entries WHERE id=?", id)
+	return err
 }
