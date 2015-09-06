@@ -35,9 +35,9 @@ func cmdStart(d db.DB, resume bool, categoryS string) {
 	}
 	if err := d.Save(entry); err != nil {
 		fatal(err)
-	} else if err := FprintEntry(os.Stdout, entry, PrintHideDuration|PrintHideEnd); err != nil {
-		fatal(err)
-	} else if err := endAt(d, entries, now); err != nil {
+	}
+	FprintEntry(os.Stdout, entry, PrintHideDuration|PrintHideEnd)
+	if err := endAt(d, entries, now); err != nil {
 		fatal(err)
 	}
 }
@@ -91,9 +91,8 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 		entry.End = t
 		if err := d.Save(entry); err != nil {
 			return err
-		} else if err := FprintEntry(os.Stdout, entry, PrintDefault); err != nil {
-			return err
 		}
+		FprintEntry(os.Stdout, entry, PrintDefault)
 	}
 	return nil
 }
@@ -102,9 +101,8 @@ func cmdLs(d db.DB, categoryS string, asc bool) {
 	itr, err := d.Query(db.Query{Asc: asc, Category: ParseCategory(categoryS)})
 	if err != nil {
 		fatal(err)
-	} else if err := FprintIterator(os.Stdout, itr, PrintDefault); err != nil {
-		fatal(err)
 	}
+	FprintIterator(os.Stdout, itr, PrintDefault)
 }
 
 func cmdEdit(d db.DB, id string) {
@@ -121,9 +119,8 @@ func cmdEdit(d db.DB, id string) {
 		fatal(err)
 	}
 	e := term.NewEditor()
-	if err := FprintEntry(e, entry, PrintSeparator|PrintHideDuration); err != nil {
-		fatal(err)
-	} else if err := e.Run(); err != nil {
+	FprintEntry(e, entry, PrintSeparator|PrintHideDuration)
+	if err := e.Run(); err != nil {
 		fatal(err)
 	} else if entries, err := ParseEntries(e); err != nil {
 		fatal(err)
@@ -133,19 +130,19 @@ func cmdEdit(d db.DB, id string) {
 		fatal(fmt.Errorf("editing multiple entries is not supported yet"))
 	} else if err := d.Save(entries[0]); err != nil {
 		fatal(err)
-	} else if err := FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault); err != nil {
-		fatal(err)
+	} else {
+		FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault)
 	}
 }
 
 func cmdRm(d db.DB, id string) {
-	if entry, err := ById(d, id); err != nil {
+	entry, err := ById(d, id)
+	if err != nil {
 		fatal(err)
 	} else if err := d.Remove(id); err != nil {
 		fatal(err)
-	} else if err := FprintEntry(os.Stdout, entry, PrintDefault); err != nil {
-		fatal(err)
 	}
+	FprintEntry(os.Stdout, entry, PrintDefault)
 }
 
 func cmdSummary(d db.DB, durationS, firstDayS string) {
@@ -242,9 +239,7 @@ outer:
 			if !entry.Start.Before(day.From) {
 				entry, err = entryItr.Next()
 				if err == io.EOF {
-					if _, err := fmt.Fprint(os.Stdout, FormatReport(report)); err != nil {
-						fatal(err)
-					}
+					fmt.Fprint(os.Stdout, FormatReport(report))
 					break outer
 				} else if err != nil {
 					fatal(err)
@@ -254,9 +249,7 @@ outer:
 			day = &ReportDay{}
 			day.From, day.To = dayItr.Next()
 			if day.To.Before(report.From) {
-				if _, err := fmt.Fprint(os.Stdout, FormatReport(report)); err != nil {
-					fatal(err)
-				}
+				fmt.Fprint(os.Stdout, FormatReport(report))
 				report = &Report{Duration: duration}
 				report.From, report.To = reportItr.Next()
 			}
