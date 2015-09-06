@@ -81,7 +81,7 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 	return nil
 }
 
-func cmdList(d db.DB) {
+func cmdLs(d db.DB) {
 	itr, err := d.Query(db.Query{})
 	if err != nil {
 		fatal(err)

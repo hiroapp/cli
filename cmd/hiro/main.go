@@ -24,8 +24,8 @@ func main() {
 	app.Command("end", "End the currently active entry", func(cmd *cli.Cmd) {
 		cmd.Action = func() { cmdEnd(mustDB()) }
 	})
-	app.Command("list", "Lists all time entries.", func(cmd *cli.Cmd) {
-		cmd.Action = func() { cmdList(mustDB()) }
+	app.Command("ls", "Lists all time entries.", func(cmd *cli.Cmd) {
+		cmd.Action = func() { cmdLs(mustDB()) }
 	})
 	app.Command("edit", "Edit time entry", func(cmd *cli.Cmd) {
 		id := cmd.StringArg("ID", "", "The id of the entry to edit")
