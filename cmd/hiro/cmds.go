@@ -23,9 +23,7 @@ func cmdStart(d db.DB, resume bool, categoryS string) {
 	entry := &db.Entry{Category: category, Start: now}
 	if resume {
 		last, err := Last(d)
-		if err == io.EOF {
-			fatal(errors.New("can't resume, no entries"))
-		} else if err != nil {
+		if err != nil {
 			fatal(err)
 		}
 		if !last.End.IsZero() {
@@ -52,14 +50,32 @@ func cmdEnd(d db.DB) {
 	}
 }
 
-// Last returns the last entry or an error.
-func Last(d db.DB) (*db.Entry, error) {
-	itr, err := d.Query(db.Query{Active: true})
+// ById returns the entry with the given id, or an error.
+func ById(d db.DB, id string) (*db.Entry, error) {
+	itr, err := d.Query(db.Query{IDs: []string{id}})
 	if err != nil {
 		return nil, err
 	}
 	defer itr.Close()
-	return itr.Next()
+	if entry, err := itr.Next(); err == io.EOF {
+		return nil, fmt.Errorf("entry does not exist: %s", id)
+	} else {
+		return entry, err
+	}
+}
+
+// Last returns the last entry or an error.
+func Last(d db.DB) (*db.Entry, error) {
+	itr, err := d.Query(db.Query{})
+	if err != nil {
+		return nil, err
+	}
+	defer itr.Close()
+	if entry, err := itr.Next(); err == io.EOF {
+		return nil, errors.New("db is empty")
+	} else {
+		return entry, err
+	}
 }
 
 func active(d db.DB) ([]*db.Entry, error) {
@@ -92,12 +108,20 @@ func cmdLs(d db.DB) {
 }
 
 func cmdEdit(d db.DB, id string) {
-	itr, err := d.Query(db.Query{IDs: []string{id}})
+	var (
+		entry *db.Entry
+		err   error
+	)
+	if id != "" {
+		entry, err = ById(d, id)
+	} else {
+		entry, err = Last(d)
+	}
 	if err != nil {
 		fatal(err)
 	}
 	e := term.NewEditor()
-	if err := FprintIterator(e, itr, PrintSeparator|PrintHideDuration); err != nil {
+	if err := FprintEntry(e, entry, PrintSeparator|PrintHideDuration); err != nil {
 		fatal(err)
 	} else if err := e.Run(); err != nil {
 		fatal(err)
@@ -115,15 +139,7 @@ func cmdEdit(d db.DB, id string) {
 }
 
 func cmdRm(d db.DB, id string) {
-	itr, err := d.Query(db.Query{IDs: []string{id}})
-	if err != nil {
-		fatal(err)
-	}
-	if entry, err := itr.Next(); err == io.EOF {
-		fatal(fmt.Errorf("entry does not exist: %s", id))
-	} else if err != nil {
-		fatal(err)
-	} else if err := itr.Close(); err != nil {
+	if entry, err := ById(d, id); err != nil {
 		fatal(err)
 	} else if err := d.Remove(id); err != nil {
 		fatal(err)

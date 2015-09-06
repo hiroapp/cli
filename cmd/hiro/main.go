@@ -28,7 +28,8 @@ func main() {
 		cmd.Action = func() { cmdLs(mustDB()) }
 	})
 	app.Command("edit", "Edit time entry", func(cmd *cli.Cmd) {
-		id := cmd.StringArg("ID", "", "The id of the entry to edit")
+		id := cmd.StringArg("ID", "", "The id of the entry to edit, defaults to last entry")
+		cmd.Spec = "[ID]"
 		cmd.Action = func() { cmdEdit(mustDB(), *id) }
 	})
 	app.Command("rm", "Remove time entry", func(cmd *cli.Cmd) {
