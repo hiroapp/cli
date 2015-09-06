@@ -161,6 +161,7 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 	if err != nil {
 		fatal(err)
 	}
+	defer entries.Close()
 	var (
 		now        = time.Now()
 		entry      *db.Entry
