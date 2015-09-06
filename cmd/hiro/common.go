@@ -228,7 +228,7 @@ func FormatReport(r *Report) string {
 	t.Add(
 		table.String("DATE"),
 		table.String("DAY"),
-		table.String("TIME"),
+		table.String("HOURS"),
 		table.String("TOTAL"),
 	)
 	var trackedTotal time.Duration
