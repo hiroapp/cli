@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/bradfitz/slice"
-	"github.com/felixge/hiro/datetime"
-	"github.com/felixge/hiro/db"
-	"github.com/felixge/hiro/table"
+	"github.com/hiroapp/cli/datetime"
+	"github.com/hiroapp/cli/db"
+	"github.com/hiroapp/cli/table"
 )
 
 var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{

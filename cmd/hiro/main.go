@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/felixge/hiro/db"
+	"github.com/hiroapp/cli/db"
 	"github.com/jawher/mow.cli"
 )
 

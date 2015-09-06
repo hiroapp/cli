@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixge/hiro/datetime"
-	"github.com/felixge/hiro/db"
-	"github.com/felixge/hiro/term"
+	"github.com/hiroapp/cli/datetime"
+	"github.com/hiroapp/cli/db"
+	"github.com/hiroapp/cli/term"
 )
 
 func cmdStart(d db.DB, categoryString string) {
