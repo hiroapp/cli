@@ -9,4 +9,7 @@ bin/hiro: bin
 test:
 	go test ./...
 
-.PHONY: bin/hiro test
+install: bin/hiro
+	install ./bin/hiro /usr/local/bin/
+
+.PHONY: bin/hiro test install
