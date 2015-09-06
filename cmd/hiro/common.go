@@ -9,7 +9,10 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/bradfitz/slice"
+	"github.com/felixge/hiro/datetime"
 	"github.com/felixge/hiro/db"
+	"github.com/felixge/hiro/table"
 )
 
 var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{
@@ -166,4 +169,37 @@ func FormatDuration(d time.Duration) string {
 	d -= minutes * time.Minute
 	seconds := d / time.Second
 	return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
+}
+
+func FormatSummary(categories map[string]time.Duration) string {
+	if len(categories) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(categories))
+	for name, _ := range categories {
+		names = append(names, name)
+	}
+	slice.Sort(names, func(i, j int) bool {
+		return categories[names[i]] > categories[names[j]]
+	})
+	t := table.New().Padding(" ")
+	for _, name := range names {
+		d := FormatDuration(categories[name])
+		t.Add(table.String(name), table.String(d).Align(table.Right))
+	}
+	return Indent(t.String(), "  ") + "\n"
+}
+
+func FormatSummaryHeadline(from, to time.Time, duration datetime.Duration) string {
+	switch duration {
+	case datetime.Day:
+		return fmt.Sprintf("%s", from.Format("Monday: 2006-01-02"))
+	case datetime.Week:
+		_, isoWeek := from.ISOWeek()
+		return fmt.Sprintf("Week %d: %s - %s", isoWeek, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	case datetime.Month:
+		return fmt.Sprintf("%s", from.Format("January 2006"))
+	default:
+		panic("not implemeneted")
+	}
 }

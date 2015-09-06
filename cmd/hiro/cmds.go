@@ -7,10 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bradfitz/slice"
 	"github.com/felixge/hiro/datetime"
 	"github.com/felixge/hiro/db"
-	"github.com/felixge/hiro/table"
 	"github.com/felixge/hiro/term"
 )
 
@@ -114,7 +112,7 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 	for {
 		entry, err = entries.Next()
 		if err == io.EOF {
-			if err := FprintSummary(os.Stdout, categories); err != nil {
+			if _, err := fmt.Printf(FormatSummary(categories)); err != nil {
 				fatal(err)
 			}
 			break
@@ -125,45 +123,20 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 			durations = datetime.NewIterator(entry.Start, duration, asc, firstDay)
 		}
 		if fromTo[0].IsZero() || entry.Start.Before(fromTo[0]) {
-			FprintSummary(os.Stdout, categories)
+			if _, err := fmt.Printf(FormatSummary(categories)); err != nil {
+				fatal(err)
+			}
 			fromTo[0], fromTo[1] = durations.Next()
 			categories = make(map[string]time.Duration)
-			fmt.Printf("%s\n\n", summaryHeadline(fromTo[0], fromTo[1], duration))
+			if _, err := fmt.Printf("%s\n\n", FormatSummaryHeadline(fromTo[0], fromTo[1], duration)); err != nil {
+				fatal(err)
+			}
 		}
 		partialDuration := entry.PartialDuration(now, fromTo[0], fromTo[1])
 		if partialDuration > 0 {
 			name := strings.Join(entry.Category, ":")
 			categories[name] += partialDuration
 		}
-	}
-}
-
-func FprintSummary(w io.Writer, categories map[string]time.Duration) error {
-	if len(categories) == 0 {
-		return nil
-	}
-	names := make([]string, 0, len(categories))
-	for name, _ := range categories {
-		names = append(names, name)
-	}
-	slice.Sort(names, func(i, j int) bool {
-		return categories[names[i]] > categories[names[j]]
-	})
-	t := table.New().Padding(" ")
-	for _, name := range names {
-		d := FormatDuration(categories[name])
-		t.Add(table.String(name), table.String(d).Align(table.Right))
-	}
-	_, err := fmt.Fprintf(w, "%s\n", Indent(t.String(), "  "))
-	return err
-}
-
-func summaryHeadline(from, to time.Time, duration datetime.Duration) string {
-	switch duration {
-	case datetime.Day:
-		return fmt.Sprintf("%s", from.Format("2006-02-01 (Monday)"))
-	default:
-		panic("not implemeneted")
 	}
 }
 
