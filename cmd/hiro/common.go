@@ -193,12 +193,14 @@ func FormatSummary(categories map[string]time.Duration) string {
 func FormatSummaryHeadline(from, to time.Time, duration datetime.Duration) string {
 	switch duration {
 	case datetime.Day:
-		return fmt.Sprintf("%s", from.Format("Monday: 2006-01-02"))
+		return fmt.Sprintf("%s", from.Format("2006-01-02: Monday"))
 	case datetime.Week:
 		_, isoWeek := from.ISOWeek()
 		return fmt.Sprintf("Week %d: %s - %s", isoWeek, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	case datetime.Month:
 		return fmt.Sprintf("%s", from.Format("January 2006"))
+	case datetime.Year:
+		return fmt.Sprintf("%s", from.Format("Year 2006"))
 	default:
 		panic("not implemeneted")
 	}
