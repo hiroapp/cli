@@ -10,7 +10,6 @@ import (
 
 	"code.google.com/p/go-uuid/uuid"
 
-	"github.com/hashicorp/go-multierror"
 	_ "github.com/mattn/go-sqlite3"
 )
 import "path/filepath"
@@ -40,11 +39,8 @@ type Query struct {
 	Asc bool
 	// Active returns entries without an end time if true.
 	Active bool
-	// StartFrom returns entries with start time that is greater or equal.
-	StartFrom time.Time
-	// StartTo returns entries with start time that is less or equal.
-	StartTo time.Time
-	// Categories [][]string
+	// Category returns entries with the given category name.
+	Category []string
 }
 
 type Iterator interface {
@@ -96,54 +92,42 @@ CREATE INDEX IF NOT EXISTS category_id ON entries(category_id);
 
 // Save is part of the db interface.
 func (d *db) Save(e *Entry) error {
-	tx, err := d.Begin()
+	e.Start = e.Start.Truncate(time.Second)
+	e.End = e.End.Truncate(time.Second)
+	err := e.Valid()
 	if err != nil {
 		return err
 	}
-	save := func() error {
-		e.Start = e.Start.Truncate(time.Second)
-		e.End = e.End.Truncate(time.Second)
-		if err = e.Valid(); err != nil {
+	var insert bool
+	if insert = e.ID == ""; insert {
+		e.ID = uuid.NewRandom().String()
+	}
+	var start, end interface{}
+	start = e.Start.Format(datetimeLayout)
+	if !e.End.IsZero() {
+		end = e.End.Format(datetimeLayout)
+	}
+	var cID interface{}
+	if len(e.Category) > 0 {
+		cID, err = d.categoryID(e.Category, true)
+		if err != nil {
 			return err
 		}
-		var insert bool
-		if insert = e.ID == ""; insert {
-			e.ID = uuid.NewRandom().String()
-		}
-		var start, end interface{}
-		start = e.Start.Format(datetimeLayout)
-		if !e.End.IsZero() {
-			end = e.End.Format(datetimeLayout)
-		}
-		var cID interface{}
-		if len(e.Category) > 0 {
-			cID, err = categoryID(tx, e.Category)
-			if err != nil {
-				return err
-			}
-		}
-		q := "INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)"
-		args := []interface{}{e.ID, start, end, e.Note, cID}
-		if !insert {
-			q = "UPDATE entries SET id=?, start=?, end=?, note=?, category_id=? WHERE id=?"
-			args = append(args, e.ID)
-		}
-		if _, err = tx.Exec(q, args...); err != nil {
-			return err
-		}
-		return nil
 	}
-	if err := save(); err == nil {
-		return tx.Commit()
-	} else if rErr := tx.Rollback(); rErr != nil {
-		return multierror.Append(err, rErr)
+	q := "INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)"
+	args := []interface{}{e.ID, start, end, e.Note, cID}
+	if !insert {
+		q = "UPDATE entries SET id=?, start=?, end=?, note=?, category_id=? WHERE id=?"
+		args = append(args, e.ID)
 	}
+	_, err = d.Exec(q, args...)
 	return err
 }
 
-func categoryID(tx *sql.Tx, names []string) (string, error) {
+// categoryID returns the id of the given category, or an error.
+func (d *db) categoryID(category []string, create bool) (string, error) {
 	var parentID sql.NullString
-	for _, name := range names {
+	for _, name := range category {
 		q := "SELECT id FROM categories WHERE name = ? AND parent_id "
 		args := []interface{}{name}
 		if parentID.Valid {
@@ -152,10 +136,13 @@ func categoryID(tx *sql.Tx, names []string) (string, error) {
 		} else {
 			q += "IS NULL"
 		}
-		row := tx.QueryRow(q, args...)
+		row := d.QueryRow(q, args...)
 		if err := row.Scan(&parentID); err == sql.ErrNoRows {
+			if !create {
+				return "", err
+			}
 			id := uuid.NewRandom().String()
-			if _, err := tx.Exec("INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
+			if _, err := d.Exec("INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
 				return "", err
 			}
 			parentID.String = id
@@ -165,6 +152,7 @@ func categoryID(tx *sql.Tx, names []string) (string, error) {
 		}
 	}
 	return parentID.String, nil
+
 }
 
 // @TODO test
@@ -183,13 +171,16 @@ func (d *db) Query(q Query) (Iterator, error) {
 	if q.Active {
 		where = append(where, "end IS NULL")
 	}
-	if !q.StartFrom.IsZero() {
-		where = append(where, "DATETIME(start, 'utc') >= ?")
-		args = append(args, q.StartFrom.UTC())
-	}
-	if !q.StartTo.IsZero() {
-		where = append(where, "DATETIME(start, 'utc') <= ?")
-		args = append(args, q.StartTo.UTC())
+	if len(q.Category) != 0 {
+		// @TODO figure out if this can be turned into a sub-query.
+		categoryID, err := d.categoryID(q.Category, false)
+		if err == sql.ErrNoRows {
+			return EntryIterator(nil), nil
+		} else if err != nil {
+			return nil, err
+		}
+		where = append(where, "category_id = ?")
+		args = append(args, categoryID)
 	}
 	if len(where) > 0 {
 		parts = append(parts, "WHERE "+strings.Join(where, " AND "))

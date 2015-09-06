@@ -98,8 +98,9 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 	return nil
 }
 
-func cmdLs(d db.DB) {
-	itr, err := d.Query(db.Query{})
+func cmdLs(d db.DB, categoryS string, asc bool) {
+	category := splitCategory(categoryS)
+	itr, err := d.Query(db.Query{Asc: asc, Category: category})
 	if err != nil {
 		fatal(err)
 	} else if err := FprintIterator(os.Stdout, itr, PrintDefault); err != nil {

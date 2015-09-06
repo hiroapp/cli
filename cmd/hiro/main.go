@@ -24,8 +24,11 @@ func main() {
 	app.Command("end", "End the currently active entry", func(cmd *cli.Cmd) {
 		cmd.Action = func() { cmdEnd(mustDB()) }
 	})
-	app.Command("ls", "Lists all time entries.", func(cmd *cli.Cmd) {
-		cmd.Action = func() { cmdLs(mustDB()) }
+	app.Command("ls", "Lists time entries.", func(cmd *cli.Cmd) {
+		asc := cmd.BoolOpt("asc", false, "Order for listing entries")
+		category := cmd.StringArg("CATEGORY", "", "Only return entries matching this category")
+		cmd.Spec = "[CATEGORY]"
+		cmd.Action = func() { cmdLs(mustDB(), *category, *asc) }
 	})
 	app.Command("edit", "Edit time entry", func(cmd *cli.Cmd) {
 		id := cmd.StringArg("ID", "", "The id of the entry to edit, defaults to last entry")
@@ -63,6 +66,9 @@ func mustDB() db.DB {
 // splitCategory splits a colon separated category identifier into the names of
 // the individual categories, e.g. "Foo:Bar:Baz" into "Foo", "Bar", "Baz".
 func splitCategory(category string) []string {
+	if category == "" {
+		return nil
+	}
 	return strings.Split(category, ":")
 }
 
