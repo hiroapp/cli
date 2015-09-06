@@ -148,7 +148,7 @@ func cmdRm(d db.DB, id string) {
 	}
 }
 
-func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
+func cmdSummary(d db.DB, durationS, firstDayS string) {
 	duration, err := datetime.ParseDuration(durationS)
 	if err != nil {
 		fatal(err)
@@ -157,7 +157,7 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 	if err != nil {
 		fatal(err)
 	}
-	entries, err := d.Query(db.Query{Asc: asc})
+	entries, err := d.Query(db.Query{})
 	if err != nil {
 		fatal(err)
 	}
@@ -180,7 +180,7 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 			fatal(err)
 		}
 		if durations == nil {
-			durations = datetime.NewIterator(entry.Start, duration, asc, firstDay)
+			durations = datetime.NewIterator(entry.Start, duration, false, firstDay)
 		}
 		if fromTo[0].IsZero() || entry.Start.Before(fromTo[0]) {
 			if _, err := fmt.Printf(FormatSummary(categories)); err != nil {
@@ -196,6 +196,71 @@ func cmdSummary(d db.DB, durationS, firstDayS string, asc bool) {
 		if partialDuration > 0 {
 			name := strings.Join(entry.Category, ":")
 			categories[name] += partialDuration
+		}
+	}
+}
+
+func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
+	duration, err := datetime.ParseDuration(durationS)
+	if err != nil {
+		fatal(err)
+	} else if duration == datetime.Day {
+		fatal(errors.New("bad duration: day"))
+	}
+	firstDay, err := datetime.ParseWeekday(firstDayS)
+	if err != nil {
+		fatal(err)
+	}
+	entryItr, err := d.Query(db.Query{Category: ParseCategory(categoryS)})
+	if err != nil {
+		fatal(err)
+	}
+	defer entryItr.Close()
+	entry, err := entryItr.Next()
+	if err == io.EOF {
+		return
+	} else if err != nil {
+		fatal(err)
+	}
+	now := time.Now()
+	reportItr := datetime.NewIterator(entry.Start, duration, false, firstDay)
+	report := &Report{Duration: duration}
+	report.From, report.To = reportItr.Next()
+	dayItr := datetime.NewIterator(report.To, datetime.Day, false, firstDay)
+	day := &ReportDay{}
+	day.From, day.To = dayItr.Next()
+	report.Days = append([]*ReportDay{day}, report.Days...)
+
+outer:
+	for {
+		var overlap time.Duration
+		for {
+			overlap = entry.PartialDuration(now, day.From, day.To)
+			if overlap > 0 {
+				day.Tracked += overlap
+			}
+			if !entry.Start.Before(day.From) {
+				entry, err = entryItr.Next()
+				if err == io.EOF {
+					if _, err := fmt.Fprint(os.Stdout, FormatReport(report)); err != nil {
+						fatal(err)
+					}
+					break outer
+				} else if err != nil {
+					fatal(err)
+				}
+				continue
+			}
+			day = &ReportDay{}
+			day.From, day.To = dayItr.Next()
+			if day.To.Before(report.From) {
+				if _, err := fmt.Fprint(os.Stdout, FormatReport(report)); err != nil {
+					fatal(err)
+				}
+				report = &Report{Duration: duration}
+				report.From, report.To = reportItr.Next()
+			}
+			report.Days = append([]*ReportDay{day}, report.Days...)
 		}
 	}
 }

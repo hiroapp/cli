@@ -39,10 +39,15 @@ func main() {
 		cmd.Action = func() { cmdRm(mustDB(), *id) }
 	})
 	app.Command("summary", "Summarize time entries", func(cmd *cli.Cmd) {
-		duration := cmd.StringOpt("duration", "day", "Summary period")
-		asc := cmd.BoolOpt("asc", false, "Summary order")
+		duration := cmd.StringOpt("duration", "day", "Summary period: day|week|month|year")
 		firstDay := cmd.StringOpt("firstDay", "Monday", "First day of the week")
-		cmd.Action = func() { cmdSummary(mustDB(), *duration, *firstDay, *asc) }
+		cmd.Action = func() { cmdSummary(mustDB(), *duration, *firstDay) }
+	})
+	app.Command("report", "Report on a single category", func(cmd *cli.Cmd) {
+		duration := cmd.StringOpt("duration", "week", "Summary period: week|month|year")
+		firstDay := cmd.StringOpt("firstDay", "Monday", "First day of the week")
+		category := cmd.StringArg("CATEGORY", "", "The category to assign to the new entry")
+		cmd.Action = func() { cmdReport(mustDB(), *category, *duration, *firstDay) }
 	})
 	app.Command("version", "Prints the version", func(cmd *cli.Cmd) {
 		cmd.Action = cmdVersion

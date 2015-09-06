@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"regexp"
@@ -214,4 +215,49 @@ func ParseCategory(category string) []string {
 		return nil
 	}
 	return strings.Split(category, ":")
+}
+
+func FormatReport(r *Report) string {
+	if r == nil {
+		return ""
+	}
+	buf := &bytes.Buffer{}
+	buf.WriteString(FormatSummaryHeadline(r.From, r.To, r.Duration))
+	buf.WriteString("\n\n")
+	t := table.New()
+	t.Add(
+		table.String("DAY"),
+		table.String("TIME"),
+		table.String("TOTAL"),
+	)
+	var trackedTotal time.Duration
+	for _, day := range r.Days {
+		trackedTotal += day.Tracked
+		dayS := day.From.Format("2006-01-02 (Monday)")
+		trackedS := FormatDuration(day.Tracked)
+		trackedTotalS := FormatDuration(trackedTotal)
+		t.Add(
+			table.String(dayS),
+			table.String(trackedS).Align(table.Right),
+			table.String(trackedTotalS).Align(table.Right),
+		)
+	}
+	buf.WriteString(Indent(t.String(), "  "))
+	buf.WriteString("\n\n")
+	return buf.String()
+}
+
+type Report struct {
+	From time.Time
+	To   time.Time
+	// @TODO Duration is an unfortunate name, maybe rename it
+	Duration datetime.Duration
+	Days     []*ReportDay
+}
+
+type ReportDay struct {
+	From    time.Time
+	To      time.Time
+	Tracked time.Duration
+	Notes   []string
 }
