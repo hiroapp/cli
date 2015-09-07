@@ -239,7 +239,7 @@ outer:
 				if !noteAssigned {
 					note := strings.Trim(entry.Note, "\n")
 					if note != "" {
-						day.Notes = append(day.Notes, note)
+						day.Notes = append([]string{note}, day.Notes...)
 					}
 					noteAssigned = true
 				}
