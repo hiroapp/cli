@@ -10,7 +10,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/bradfitz/slice"
 	"github.com/hiroapp/cli/datetime"
 	"github.com/hiroapp/cli/db"
 	"github.com/hiroapp/cli/table"
@@ -172,27 +171,8 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 }
 
-func FormatSummary(categories map[string]time.Duration) string {
-	if len(categories) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(categories))
-	for name, _ := range categories {
-		names = append(names, name)
-	}
-	slice.Sort(names, func(i, j int) bool {
-		return categories[names[i]] > categories[names[j]]
-	})
-	t := table.New().Padding(" ")
-	for _, name := range names {
-		d := FormatDuration(categories[name])
-		t.Add(table.String(name), table.String(d).Align(table.Right))
-	}
-	return Indent(t.String(), "  ") + "\n"
-}
-
-func FormatSummaryHeadline(from, to time.Time, duration datetime.Duration) string {
-	switch duration {
+func PeriodHeadline(from, to time.Time, period datetime.Duration) string {
+	switch period {
 	case datetime.Day:
 		return fmt.Sprintf("%s", from.Format("2006-01-02: Monday"))
 	case datetime.Week:
@@ -222,7 +202,7 @@ func FormatReport(r *Report) string {
 		return ""
 	}
 	buf := &bytes.Buffer{}
-	buf.WriteString(FormatSummaryHeadline(r.From, r.To, r.Duration))
+	buf.WriteString(PeriodHeadline(r.From, r.To, r.Duration))
 	buf.WriteString("\n\n")
 	t := table.New()
 	t.Add(

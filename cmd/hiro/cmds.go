@@ -8,8 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bradfitz/slice"
+	"github.com/hiroapp/cli"
 	"github.com/hiroapp/cli/datetime"
 	"github.com/hiroapp/cli/db"
+	"github.com/hiroapp/cli/table"
 	"github.com/hiroapp/cli/term"
 )
 
@@ -145,8 +148,8 @@ func cmdRm(d db.DB, id string) {
 	FprintEntry(os.Stdout, entry, PrintDefault)
 }
 
-func cmdSummary(d db.DB, durationS, firstDayS string) {
-	duration, err := datetime.ParseDuration(durationS)
+func cmdSummary(d db.DB, periodS, firstDayS string) {
+	period, err := datetime.ParseDuration(periodS)
 	if err != nil {
 		fatal(err)
 	}
@@ -154,45 +157,32 @@ func cmdSummary(d db.DB, durationS, firstDayS string) {
 	if err != nil {
 		fatal(err)
 	}
-	entries, err := d.Query(db.Query{})
+	h := hiro.NewHiro(d)
+	itr, err := h.SummaryIterator(period, firstDay, time.Now())
 	if err != nil {
 		fatal(err)
 	}
-	defer entries.Close()
-	var (
-		now        = time.Now()
-		entry      *db.Entry
-		durations  *datetime.Iterator
-		fromTo     [2]time.Time
-		categories map[string]time.Duration
-	)
+	defer itr.Close()
 	for {
-		entry, err = entries.Next()
-		if err == io.EOF {
-			if _, err := fmt.Printf(FormatSummary(categories)); err != nil {
-				fatal(err)
-			}
+		if summary, err := itr.Next(); err == io.EOF {
 			break
 		} else if err != nil {
 			fatal(err)
-		}
-		if durations == nil {
-			durations = datetime.NewIterator(entry.Start, duration, false, firstDay)
-		}
-		if fromTo[0].IsZero() || entry.Start.Before(fromTo[0]) {
-			if _, err := fmt.Printf(FormatSummary(categories)); err != nil {
-				fatal(err)
+		} else {
+			fmt.Printf("%s\n\n", PeriodHeadline(summary.From, summary.To, period))
+			names := make([]string, 0, len(summary.Categories))
+			for name, _ := range summary.Categories {
+				names = append(names, name)
 			}
-			fromTo[0], fromTo[1] = durations.Next()
-			categories = make(map[string]time.Duration)
-			if _, err := fmt.Printf("%s\n\n", FormatSummaryHeadline(fromTo[0], fromTo[1], duration)); err != nil {
-				fatal(err)
+			slice.Sort(names, func(i, j int) bool {
+				return summary.Categories[names[i]] > summary.Categories[names[j]]
+			})
+			t := table.New().Padding(" ")
+			for _, name := range names {
+				d := FormatDuration(summary.Categories[name])
+				t.Add(table.String(name), table.String(d).Align(table.Right))
 			}
-		}
-		partialDuration := entry.PartialDuration(now, fromTo[0], fromTo[1])
-		if partialDuration > 0 {
-			name := strings.Join(entry.Category, ":")
-			categories[name] += partialDuration
+			fmt.Printf("%s\n", Indent(t.String(), "  "))
 		}
 	}
 }
