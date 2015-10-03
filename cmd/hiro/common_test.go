@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixge/godebug/pretty"
 	"github.com/hiroapp/cli/db"
+	"github.com/kylelemons/godebug/pretty"
 )
 
 func TestParseEntries(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixge/godebug/pretty"
+	"github.com/kylelemons/godebug/pretty"
 )
 
 var diffConfig = &pretty.Config{Diffable: true, PrintStringers: true}

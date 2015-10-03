@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixge/godebug/pretty"
+	"github.com/kylelemons/godebug/pretty"
 
 	"code.google.com/p/go-uuid/uuid"
 )
