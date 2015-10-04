@@ -79,77 +79,99 @@ const (
 	entrySeparator = "8< ----- do not remove this separator ----- >8"
 )
 
-// ParseEntries parses entries in a, for now, poorly specified plaintext
-// format from r and returns them or an error.
+// parseDocument parses a document from r, returning its fields and remainder
+// or an error if a field occured more than once, or r returned an error.
 //
-// @TODO properly define the plaintext format and implement good error
-// handling.
-func ParseEntries(r io.Reader) ([]*db.Entry, error) {
-	var (
-		entries []*db.Entry
-		entry   = &db.Entry{}
-		scanner = bufio.NewScanner(r)
-		isNote  = false
-	)
-	for {
-		var (
-			ok   = scanner.Scan()
-			line string
-		)
-		if ok {
-			line = scanner.Text()
-		}
-		if !ok || line == entrySeparator {
-			isNote = false
-			entry.Note = strings.TrimSpace(entry.Note)
-			if !entry.Empty() {
-				entries = append(entries, entry)
-				entry = &db.Entry{}
-			}
-			if !ok {
-				break
-			}
-			continue
-		}
-		matches := entryField.FindStringSubmatch(line)
-		if isNote {
-			entry.Note += line + "\n"
-			continue
-		} else if line == "" {
-			if !entry.Empty() {
-				isNote = true
-			}
-			continue
-		} else if len(matches) != 3 {
-			return nil, fmt.Errorf("bad line: %q", line)
-		}
-		field, val := matches[1], matches[2]
-		switch fieldLow := strings.ToLower(field); fieldLow {
-		case "id":
-			entry.ID = val
-		case "category":
-			entry.Category = ParseCategory(val)
-		case "start", "end":
-			if val == "" {
+// Example Document:
+//
+//     Field1: val1
+//     Field2: val2
+//
+//     multi line
+//     remainder text
+//
+// @TODO: Define Document ABNF, see test case for now.
+func parseDocument(r io.Reader) (fields map[string]string, remainder string, err error) {
+	scanner := bufio.NewScanner(r)
+	isRemainder := false
+	fields = map[string]string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !isRemainder {
+			if line == "" {
+				isRemainder = true
 				continue
 			}
+			pair := strings.SplitN(line, ":", 2)
+			for i, val := range pair {
+				pair[i] = strings.TrimSpace(val)
+			}
+			field, val := pair[0], pair[1]
+			if _, ok := fields[field]; ok {
+				err = fmt.Errorf("duplicate field: %q", field)
+				break
+			} else {
+				fields[field] = val
+			}
+		} else {
+			remainder += line + "\n"
+		}
+	}
+	remainder = strings.TrimRight(remainder, " \n\r")
+	if err == nil {
+		err = scanner.Err()
+	}
+	if err != nil {
+		fields = nil
+		remainder = ""
+	}
+	return
+}
+
+// ParseEntryDocument parses a entry document from r or returns an error. If
+// there entry document is empty, nil is returned for it.
+func ParseEntryDocument(r io.Reader) (*EntryDocument, error) {
+	fields, note, err := parseDocument(r)
+	if err != nil {
+		return nil, err
+	} else if len(fields) == 0 && len(note) == 0 {
+		return nil, nil
+	}
+	entry := &EntryDocument{Note: note}
+	for field, val := range fields {
+		if field == "Start" || field == "End" {
 			tVal, err := time.Parse(timeLayout, val)
 			if err != nil {
 				return nil, err
 			}
-			if fieldLow == "start" {
+			// time.Parse will add the local zone name if the offset matches it, but
+			// we're not interested in the name, so we drop it.
+			_, offset := tVal.Zone()
+			tVal = tVal.In(time.FixedZone("", offset))
+			if field == "Start" {
 				entry.Start = tVal
 			} else {
 				entry.End = tVal
 			}
-		default:
-			return nil, fmt.Errorf("Unknown field: %s", field)
+		} else {
+			switch field {
+			case "Id":
+				entry.ID = val
+			case "Category":
+				entry.Category = ParseCategory(val)
+			}
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("Failed to scan: %s", err)
-	}
-	return entries, nil
+	return entry, nil
+}
+
+// EntryDocument holds a entry document used for editing entries.
+type EntryDocument struct {
+	ID       string
+	Category []string
+	Start    time.Time
+	End      time.Time
+	Note     string
 }
 
 func Indent(s, indent string) string {

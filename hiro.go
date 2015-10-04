@@ -1,7 +1,6 @@
 package hiro
 
 import (
-	"strings"
 	"time"
 
 	"github.com/hiroapp/cli/db"
@@ -65,8 +64,7 @@ func (s *SummaryIterator) Next() (*Summary, error) {
 	for {
 		duration := s.entry.PartialDuration(s.now, summary.From, summary.To)
 		if duration > 0 {
-			category := strings.Join(s.entry.Category, ":")
-			summary.Categories[category] += duration
+			summary.Categories[s.entry.CategoryID] += duration
 		}
 		if s.entry.Start.Before(summary.From) {
 			break

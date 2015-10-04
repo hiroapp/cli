@@ -99,7 +99,7 @@ func TestSaveEntry(t *testing.T) {
 
 func TestGetOrCreateCategoryPath(t *testing.T) {
 	db := mustDB(t)
-	path, err := db.GetOrCreateCategoryPath([]string{"a", "b", "c"})
+	path, err := db.CategoryPath([]string{"a", "b", "c"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,12 +110,12 @@ func TestGetOrCreateCategoryPath(t *testing.T) {
 	}
 	if diff := pretty.Compare(path, wantPath); diff != "" {
 		t.Fatal(diff)
-	} else if path2, err := db.GetOrCreateCategoryPath([]string{"a", "b", "c"}); err != nil {
+	} else if path2, err := db.CategoryPath([]string{"a", "b", "c"}, true); err != nil {
 		t.Fatal(err)
 	} else if diff := pretty.Compare(path2, wantPath); diff != "" {
 		t.Fatal(diff)
 	}
-	path3, err := db.GetOrCreateCategoryPath([]string{"a", "d"})
+	path3, err := db.CategoryPath([]string{"a", "d"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +138,10 @@ func TestGetOrCreateCategoryPath(t *testing.T) {
 	}
 	if diff := pretty.Compare(categories, wantCategories); diff != "" {
 		t.Fatal(diff)
+	}
+	// @TODO check actual error
+	if _, err := db.CategoryPath([]string{"a", "e"}, false); err == nil {
+		t.Fatal("expected does not exist error")
 	}
 }
 

@@ -1,94 +1,119 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/hiroapp/cli/db"
 	"github.com/kylelemons/godebug/pretty"
 )
 
-func TestParseEntries(t *testing.T) {
-	t.Skipf("broken, will fix later")
-	var zoneCEST = time.FixedZone("CEST", int((2 * time.Hour).Seconds()))
+var diffConfig = &pretty.Config{
+	Diffable:       true,
+	PrintStringers: true,
+}
+
+func Test_parseDocument(t *testing.T) {
 	tests := []struct {
-		Text    string
-		Want    []*db.Entry
-		WantErr string
+		Name      string
+		R         io.Reader
+		Fields    map[string]string
+		Remainder string
+		Err       error
 	}{
-		// empty entry
-		{},
-		// simple entry, empty end
 		{
-			Text: `
-Id:       3847c8e1-8d25-46e5-a09e-36c40266c871
-Category: Work:Hiro
-Start:    2015-08-04 10:13:51 +0000 UTC
-End:
-
-Hello World
-`,
-			Want: []*db.Entry{
-				&db.Entry{
-					ID:       "3847c8e1-8d25-46e5-a09e-36c40266c871",
-					Category: []string{"Work", "Hiro"},
-					Start:    time.Date(2015, 8, 4, 10, 13, 51, 0, time.UTC),
-					Note:     "Hello World",
-				},
-			},
+			Name: "empty document",
+			R:    strings.NewReader(""),
 		},
-		// multiple multi-line entries, one with end, one without
 		{
+			Name:   "simple field",
+			R:      strings.NewReader("foo:bar"),
+			Fields: map[string]string{"foo": "bar"},
+		},
+		{
+			Name:   "simple field with trim",
+			R:      strings.NewReader("   foo  :   bar   "),
+			Fields: map[string]string{"foo": "bar"},
+		},
+		{
+			Name:   "simple field with colon value",
+			R:      strings.NewReader("foo: bar:baz"),
+			Fields: map[string]string{"foo": "bar:baz"},
+		},
+		{
+			Name:   "multiple fields",
+			R:      strings.NewReader("a: b\nc: d\ne: f"),
+			Fields: map[string]string{"a": "b", "c": "d", "e": "f"},
+		},
+		{
+			Name:      "multiple fields with remainder",
+			R:         strings.NewReader("a: b\nc: d\ne: f\n\nsome remainder"),
+			Fields:    map[string]string{"a": "b", "c": "d", "e": "f"},
+			Remainder: "some remainder",
+		},
+		{
+			Name:      "multiple fields with remainder trim",
+			R:         strings.NewReader("a: b\nc: d\ne: f\n\n some remainder\r\n\ntext\n\r \n"),
+			Fields:    map[string]string{"a": "b", "c": "d", "e": "f"},
+			Remainder: " some remainder\n\ntext",
+		},
+		{
+			Name: "duplicate field",
+			R:    strings.NewReader("a: b\na: c"),
+			Err:  errors.New("duplicate field: \"a\""),
+		},
+		{
+			Name:      "just remainder",
+			R:         strings.NewReader("\nfoo"),
+			Remainder: "foo",
+		},
+	}
+	for _, test := range tests {
+		fields, remainder, err := parseDocument(test.R)
+		got := []interface{}{fields, remainder, err}
+		want := []interface{}{test.Fields, test.Remainder, test.Err}
+		if diff := pretty.Compare(got, want); diff != "" {
+			t.Errorf("test %q: %s", test.Name, diff)
+		}
+	}
+}
 
-			Text: `
-Id:       0cd7ca90-c19a-4b11-8d98-cd29d467f9f8
-Category: Misc
-Start:    2015-08-04 10:19:51 +0200 CEST
+func TestParseEntryDocument(t *testing.T) {
+	tests := []struct {
+		Name  string
+		R     io.Reader
+		Entry *EntryDocument
+		Err   error
+	}{
+		{
+			Name: "empty entry",
+			R:    strings.NewReader(""),
+		},
+		{
+			Name: "full entry",
+			R: strings.NewReader(`Id: 1
+Category: Work:Hiro
+Start: 2015-10-04 12:59:17 +0200
+End: 2015-10-04 13:23:04 +0100
 
-This is a time entry.
-
-With a newline.
-
-8< ----- do not remove this separator ----- >8
-
-Id:       9fc585e2-0314-4816-95fc-70e0e75f3b1d
-Category: Another Category
-Start:    2015-08-04 10:13:51 +0000 UTC
-End:      2015-08-04 10:19:51 +0200 CEST
-
-And this is another time entry.
-
-With a newline.
-`,
-			Want: []*db.Entry{
-				&db.Entry{
-					ID:       "0cd7ca90-c19a-4b11-8d98-cd29d467f9f8",
-					Category: []string{"Misc"},
-					Start:    time.Date(2015, 8, 4, 10, 19, 51, 0, zoneCEST),
-					Note:     "This is a time entry.\n\nWith a newline.",
-				},
-				&db.Entry{
-					ID:       "9fc585e2-0314-4816-95fc-70e0e75f3b1d",
-					Category: []string{"Another Category"},
-					Start:    time.Date(2015, 8, 4, 10, 13, 51, 0, time.UTC),
-					End:      time.Date(2015, 8, 4, 10, 19, 51, 0, zoneCEST),
-					Note:     "And this is another time entry.\n\nWith a newline.",
-				},
+The cake is a lie!`),
+			Entry: &EntryDocument{
+				ID:       "1",
+				Category: []string{"Work", "Hiro"},
+				Start:    time.Date(2015, 10, 04, 12, 59, 17, 0, time.FixedZone("", 2*60*60)),
+				End:      time.Date(2015, 10, 04, 13, 23, 4, 0, time.FixedZone("", 1*60*60)),
+				Note:     "The cake is a lie!",
 			},
 		},
 	}
-	for i, test := range tests {
-		entries, err := ParseEntries(strings.NewReader(test.Text))
-		var gotErr string
-		if err != nil {
-			gotErr = err.Error()
-		}
-		if gotErr != test.WantErr {
-			t.Errorf("test %d: got=%q want=%q", i, gotErr, test.WantErr)
-		}
-		if diff := (&pretty.Config{Diffable: true, PrintStringers: true}).Compare(entries, test.Want); diff != "" {
-			t.Errorf("test %d: %s", i, diff)
+	for _, test := range tests {
+		entry, err := ParseEntryDocument(test.R)
+		got := []interface{}{entry, err}
+		want := []interface{}{test.Entry, test.Err}
+		if diff := diffConfig.Compare(got, want); diff != "" {
+			t.Errorf("test %q: %s", test.Name, diff)
 		}
 	}
 }

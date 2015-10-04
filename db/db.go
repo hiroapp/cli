@@ -30,9 +30,9 @@ type DB interface {
 	// Remove deletes the entry with the given id from the db or returns an
 	// error.
 	Remove(string) error
-	// GetOrCreateCategoryPath returns a category path with the given names,
-	// creating categories as needed.
-	GetOrCreateCategoryPath([]string) (CategoryPath, error)
+	// CategoryPath returns a category path with the given names, creating
+	// categories as needed if created is true.
+	CategoryPath(names []string, create bool) (CategoryPath, error)
 	// categories as needed
 	// SaveCategory saves the given Category.
 	SaveCategory(*Category) error
@@ -161,8 +161,8 @@ func (d *db) Query(q Query) (Iterator, error) {
 	return &iterator{db: d.DB, rows: rows}, err
 }
 
-// GetOrCreateCategoryPath is part of the DB interface.
-func (d *db) GetOrCreateCategoryPath(names []string) (CategoryPath, error) {
+// CategoryPath is part of the DB interface.
+func (d *db) CategoryPath(names []string, create bool) (CategoryPath, error) {
 	categories, err := d.Categories()
 	if err != nil {
 		return nil, err
@@ -178,6 +178,8 @@ func (d *db) GetOrCreateCategoryPath(names []string) (CategoryPath, error) {
 		} else if l == 1 {
 			node = nodes[0]
 			category = node.Category
+		} else if create == false {
+			return nil, errors.New("category does not exist")
 		} else {
 			node = nil
 			category = &Category{Name: name, ParentID: categoryID}

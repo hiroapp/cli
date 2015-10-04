@@ -22,8 +22,11 @@ func cmdStart(d db.DB, resume bool, categoryS string) {
 		fatal(err)
 	}
 	now := time.Now()
-	category := ParseCategory(categoryS)
-	entry := &db.Entry{Category: category, Start: now}
+	path, err := d.CategoryPath(ParseCategory(categoryS), true)
+	if err != nil {
+		fatal(err)
+	}
+	entry := &db.Entry{CategoryID: path.CategoryID(), Start: now}
 	if resume {
 		last, err := Last(d)
 		if err != nil {
@@ -32,11 +35,11 @@ func cmdStart(d db.DB, resume bool, categoryS string) {
 		if !last.End.IsZero() {
 			entry.Start = last.End
 		}
-		if categoryS == "" {
-			entry.Category = last.Category
+		if entry.CategoryID == "" {
+			entry.CategoryID = last.CategoryID
 		}
 	}
-	if err := d.Save(entry); err != nil {
+	if err := d.SaveEntry(entry); err != nil {
 		fatal(err)
 	}
 	FprintEntry(os.Stdout, entry, PrintHideDuration|PrintHideEnd)
@@ -92,7 +95,7 @@ func active(d db.DB) ([]*db.Entry, error) {
 func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 	for _, entry := range entries {
 		entry.End = t
-		if err := d.Save(entry); err != nil {
+		if err := d.SaveEntry(entry); err != nil {
 			return err
 		}
 		FprintEntry(os.Stdout, entry, PrintDefault)
@@ -101,11 +104,13 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 }
 
 func cmdLs(d db.DB, categoryS string, asc bool) {
-	itr, err := d.Query(db.Query{Asc: asc, Category: ParseCategory(categoryS)})
-	if err != nil {
+	if path, err := d.CategoryPath(ParseCategory(categoryS), false); err != nil {
 		fatal(err)
+	} else if itr, err := d.Query(db.Query{Asc: asc, CategoryID: path.CategoryID()}); err != nil {
+		fatal(err)
+	} else {
+		FprintIterator(os.Stdout, itr, PrintDefault)
 	}
-	FprintIterator(os.Stdout, itr, PrintDefault)
 }
 
 func cmdEdit(d db.DB, id string) {
@@ -125,16 +130,27 @@ func cmdEdit(d db.DB, id string) {
 	FprintEntry(e, entry, PrintSeparator|PrintHideDuration)
 	if err := e.Run(); err != nil {
 		fatal(err)
-	} else if entries, err := ParseEntries(e); err != nil {
+	} else if doc, err := ParseEntryDocument(e); err != nil {
 		fatal(err)
-	} else if l := len(entries); l == 0 {
+	} else if doc == nil {
 		return
-	} else if l > 1 {
-		fatal(fmt.Errorf("editing multiple entries is not supported yet"))
-	} else if err := d.Save(entries[0]); err != nil {
-		fatal(err)
 	} else {
-		FprintIterator(os.Stdout, db.EntryIterator(entries), PrintDefault)
+		entry := &db.Entry{
+			ID:    doc.ID,
+			Start: doc.Start,
+			End:   doc.End,
+			Note:  doc.Note,
+		}
+		if path, err := d.CategoryPath(doc.Category, false); err != nil {
+			fatal(err)
+		} else {
+			entry.CategoryID = path.CategoryID()
+		}
+		if err := d.SaveEntry(entry); err != nil {
+			fatal(err)
+		} else {
+			FprintIterator(os.Stdout, db.EntryIterator([]*db.Entry{entry}), PrintDefault)
+		}
 	}
 }
 
@@ -198,7 +214,11 @@ func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
 	if err != nil {
 		fatal(err)
 	}
-	entryItr, err := d.Query(db.Query{Category: ParseCategory(categoryS)})
+	path, err := d.CategoryPath(ParseCategory(categoryS), false)
+	if err != nil {
+		fatal(err)
+	}
+	entryItr, err := d.Query(db.Query{CategoryID: path.CategoryID()})
 	if err != nil {
 		fatal(err)
 	}
