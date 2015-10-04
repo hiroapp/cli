@@ -101,7 +101,7 @@ func endAt(d db.DB, entries []*db.Entry, t time.Time) error {
 		if err := d.SaveEntry(entry); err != nil {
 			return err
 		}
-		FprintEntry(os.Stdout, entry, categories.Path(entry.ID), PrintDefault)
+		FprintEntry(os.Stdout, entry, categories.Path(entry.CategoryID), PrintDefault)
 	}
 	return nil
 }
