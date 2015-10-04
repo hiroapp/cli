@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,14 +21,23 @@ const (
 
 // DB defines the hiro database api.
 type DB interface {
-	// Save normalizes, validates and saves the given entry or returns an error.
-	Save(*Entry) error
+	// SaveEntry normalizes, validates and saves the given entry or returns an
+	// error.
+	SaveEntry(*Entry) error
 	// Query returns an Iterator that lists all entries matched by the given
 	// query, or an error. Callers are required to call Close() on the iterator.
 	Query(Query) (Iterator, error)
 	// Remove deletes the entry with the given id from the db or returns an
 	// error.
 	Remove(string) error
+	// CategoryPath returns a category path with the given names, creating
+	// categories as needed if created is true.
+	CategoryPath(names []string, create bool) (CategoryPath, error)
+	// categories as needed
+	// SaveCategory saves the given Category.
+	SaveCategory(*Category) error
+	// Categories returns all categories indexed by id an error.
+	Categories() (CategoryMap, error)
 	// Close closes the database.
 	Close() error
 }
@@ -39,8 +49,8 @@ type Query struct {
 	Asc bool
 	// Active returns entries without an end time if true.
 	Active bool
-	// Category returns entries with the given category name.
-	Category []string
+	// Category returns entries with the given category id.
+	CategoryID string
 }
 
 type Iterator interface {
@@ -90,8 +100,8 @@ CREATE INDEX IF NOT EXISTS category_id ON entries(category_id);
 	return err
 }
 
-// Save is part of the db interface.
-func (d *db) Save(e *Entry) error {
+// SaveEntry is part of the DB interface.
+func (d *db) SaveEntry(e *Entry) error {
 	e.Start = e.Start.Truncate(time.Second)
 	e.End = e.End.Truncate(time.Second)
 	err := e.Valid()
@@ -107,52 +117,15 @@ func (d *db) Save(e *Entry) error {
 	if !e.End.IsZero() {
 		end = e.End.Format(datetimeLayout)
 	}
-	var cID interface{}
-	if len(e.Category) > 0 {
-		cID, err = d.categoryID(e.Category, true)
-		if err != nil {
-			return err
-		}
-	}
+	categoryID := sql.NullString{String: e.CategoryID, Valid: e.CategoryID != ""}
 	q := "INSERT INTO entries (id, start, end, note, category_id) VALUES (?, ?, ?, ?, ?)"
-	args := []interface{}{e.ID, start, end, e.Note, cID}
+	args := []interface{}{e.ID, start, end, e.Note, categoryID}
 	if !insert {
 		q = "UPDATE entries SET id=?, start=?, end=?, note=?, category_id=? WHERE id=?"
 		args = append(args, e.ID)
 	}
 	_, err = d.Exec(q, args...)
 	return err
-}
-
-// categoryID returns the id of the given category, or an error.
-func (d *db) categoryID(category []string, create bool) (string, error) {
-	var parentID sql.NullString
-	for _, name := range category {
-		q := "SELECT id FROM categories WHERE name = ? AND parent_id "
-		args := []interface{}{name}
-		if parentID.Valid {
-			q += "= ?"
-			args = append(args, parentID)
-		} else {
-			q += "IS NULL"
-		}
-		row := d.QueryRow(q, args...)
-		if err := row.Scan(&parentID); err == sql.ErrNoRows {
-			if !create {
-				return "", err
-			}
-			id := uuid.NewRandom().String()
-			if _, err := d.Exec("INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)", id, name, parentID); err != nil {
-				return "", err
-			}
-			parentID.String = id
-			parentID.Valid = true
-		} else if err != nil {
-			return "", err
-		}
-	}
-	return parentID.String, nil
-
 }
 
 // @TODO test
@@ -171,16 +144,9 @@ func (d *db) Query(q Query) (Iterator, error) {
 	if q.Active {
 		where = append(where, "end IS NULL")
 	}
-	if len(q.Category) != 0 {
-		// @TODO figure out if this can be turned into a sub-query.
-		categoryID, err := d.categoryID(q.Category, false)
-		if err == sql.ErrNoRows {
-			return EntryIterator(nil), nil
-		} else if err != nil {
-			return nil, err
-		}
+	if q.CategoryID != "" {
 		where = append(where, "category_id = ?")
-		args = append(args, categoryID)
+		args = append(args, q.CategoryID)
 	}
 	if len(where) > 0 {
 		parts = append(parts, "WHERE "+strings.Join(where, " AND "))
@@ -193,6 +159,76 @@ func (d *db) Query(q Query) (Iterator, error) {
 	sql := strings.Join(parts, " ")
 	rows, err := d.DB.Query(sql, args...)
 	return &iterator{db: d.DB, rows: rows}, err
+}
+
+// CategoryPath is part of the DB interface.
+func (d *db) CategoryPath(names []string, create bool) (CategoryPath, error) {
+	categories, err := d.Categories()
+	if err != nil {
+		return nil, err
+	}
+	node := categories.Root()
+	path := make(CategoryPath, 0, len(names))
+	var categoryID string
+	for _, name := range names {
+		var category *Category
+		nodes := node.ChildrenByName(name)
+		if l := len(nodes); l > 1 {
+			return nil, errors.New("category exists more than once")
+		} else if l == 1 {
+			node = nodes[0]
+			category = node.Category
+		} else if create == false {
+			return nil, errors.New("category does not exist")
+		} else {
+			node = nil
+			category = &Category{Name: name, ParentID: categoryID}
+			if err := d.SaveCategory(category); err != nil {
+				return nil, err
+			}
+		}
+		path = append(path, category)
+		categoryID = category.ID
+	}
+	return path, nil
+}
+
+// SaveCategory is part of the DB interface.
+func (d *db) SaveCategory(c *Category) error {
+	var insert bool
+	if insert = c.ID == ""; insert {
+		c.ID = uuid.NewRandom().String()
+	}
+	parentID := sql.NullString{String: c.ParentID, Valid: c.ParentID != ""}
+	q := "INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)"
+	args := []interface{}{c.ID, c.Name, parentID}
+	if !insert {
+		q = "UPDATE categories SET id=?, name=?, parent_id=? WHERE id=?"
+		args = append(args, c.ID)
+	}
+	_, err := d.Exec(q, args...)
+	return err
+
+}
+
+// Categories is part of the DB interface.
+func (d *db) Categories() (CategoryMap, error) {
+	rows, err := d.DB.Query("SELECT id, name, parent_id FROM categories")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]*Category)
+	for rows.Next() {
+		category := &Category{}
+		var parentID sql.NullString
+		if err := rows.Scan(&category.ID, &category.Name, &parentID); err != nil {
+			return nil, err
+		}
+		category.ParentID = parentID.String
+		m[category.ID] = category
+	}
+	return m, nil
 }
 
 func (d *db) Close() error {
@@ -217,6 +253,7 @@ func (i *iterator) Next() (*Entry, error) {
 	if err := i.rows.Scan(&entry.ID, &start, &end, &entry.Note, &categoryID); err != nil {
 		return nil, err
 	}
+	entry.CategoryID = categoryID.String
 	for dst, val := range map[*time.Time]sql.NullString{&entry.Start: start, &entry.End: end} {
 		if !val.Valid {
 			continue
@@ -226,48 +263,7 @@ func (i *iterator) Next() (*Entry, error) {
 			*dst = t
 		}
 	}
-	if categoryID.Valid {
-		category, err := i.category(categoryID.String)
-		if err != nil {
-			return nil, err
-		}
-		entry.Category = category
-	}
 	return &entry, i.rows.Err()
-}
-
-func (i *iterator) category(id string) ([]string, error) {
-	rows, err := i.db.Query(`
-WITH RECURSIVE
-	category_ids(category_id) AS (
-		VALUES(?)
-		UNION ALL
-		SELECT parent_id
-			FROM categories, category_ids
-			WHERE id=category_id
-	)
-SELECT categories.name
-	FROM categories, category_ids
-	WHERE category_ids.category_id = categories.id;
-`, id)
-	if err != nil {
-		return nil, err
-	}
-	names := []string{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		names = append([]string{name}, names...)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	} else if err := rows.Close(); err != nil {
-		return nil, err
-	} else {
-		return names, nil
-	}
 }
 
 func (i *iterator) Close() error {

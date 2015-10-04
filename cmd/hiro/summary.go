@@ -1,30 +1,18 @@
-package hiro
+package main
 
 import (
-	"strings"
 	"time"
 
-	"github.com/hiroapp/cli/db"
-
 	"github.com/hiroapp/cli/datetime"
+	"github.com/hiroapp/cli/db"
 )
 
-// NewHiro returns a Hiro instance using the given db.
-func NewHiro(db db.DB) *Hiro {
-	return &Hiro{db: db}
-}
-
-// Hiro implements high level hiro features.
-type Hiro struct {
-	db db.DB
-}
-
-// SummaryIterator returns a new summary iterator producing summaries for the
-// given period and firstDay of the week. If the period is datetime.Day, it is
-// is ignored. Callers are required to call Close once they are done with the
-// iterator.
-func (h *Hiro) SummaryIterator(period datetime.Duration, firstDay time.Weekday, now time.Time) (*SummaryIterator, error) {
-	entries, err := h.db.Query(db.Query{})
+// NewSummaryIterator returns a new summary iterator producing summaries for
+// the given period and firstDay of the week. If the period is datetime.Day,
+// it is is ignored. Callers are required to call Close once they are done
+// with the iterator.
+func NewSummaryIterator(d db.DB, period datetime.Duration, firstDay time.Weekday, now time.Time) (*SummaryIterator, error) {
+	entries, err := d.Query(db.Query{})
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +53,7 @@ func (s *SummaryIterator) Next() (*Summary, error) {
 	for {
 		duration := s.entry.PartialDuration(s.now, summary.From, summary.To)
 		if duration > 0 {
-			category := strings.Join(s.entry.Category, ":")
-			summary.Categories[category] += duration
+			summary.Categories[s.entry.CategoryID] += duration
 		}
 		if s.entry.Start.Before(summary.From) {
 			break

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/bradfitz/slice"
 )
 
 func EntryIterator(entries []*Entry) Iterator {
@@ -38,11 +40,11 @@ func IteratorEntries(itr Iterator) ([]*Entry, error) {
 }
 
 type Entry struct {
-	ID       string
-	Category []string
-	Start    time.Time
-	End      time.Time
-	Note     string
+	ID         string
+	CategoryID string
+	Start      time.Time
+	End        time.Time
+	Note       string
 }
 
 func (e Entry) Valid() error {
@@ -81,27 +83,98 @@ func (e Entry) PartialDuration(now, from, to time.Time) time.Duration {
 	return to.Sub(from)
 }
 
+// @TODO can this be removed?
 func (e *Entry) Equal(o *Entry) bool {
 	return e == o ||
 		(e.ID == o.ID &&
 			e.Start.Equal(o.Start) &&
 			e.End.Equal(o.End) &&
 			e.Note == o.Note &&
-			stringSliceEqual(e.Category, o.Category))
+			e.CategoryID == o.CategoryID)
 }
 
+// @TODO can this be removed?
 func (e *Entry) Empty() bool {
 	return e.Equal(&Entry{})
 }
 
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+type Category struct {
+	ID       string
+	Name     string
+	ParentID string
+}
+
+// CategoryNode is a node in a category tree.
+type CategoryNode struct {
+	// Category is the category for the current node, or nil for the root node.
+	*Category
+	// Children holds the child nodes of the current category, ordered by name.
+	Children []*CategoryNode
+}
+
+// ChildrenByName returns the child nodes matching the given name, if any.
+func (c *CategoryNode) ChildrenByName(name string) []*CategoryNode {
+	if c == nil {
+		return nil
 	}
-	for i, av := range a {
-		if b[i] != av {
-			return false
+	var nodes []*CategoryNode
+	for _, node := range c.Children {
+		if node.Name == name {
+			nodes = append(nodes, node)
 		}
 	}
-	return true
+	return nodes
+}
+
+// CategoryPath holds a path of the category tree.
+type CategoryPath []*Category
+
+// CategoryID returns the id of the last category in the path or an empty
+// string if the path is empty.
+func (c CategoryPath) CategoryID() string {
+	if len(c) == 0 {
+		return ""
+	}
+	return c[len(c)-1].ID
+}
+
+// CategoryMap is a set of categories indexed by id.
+type CategoryMap map[string]*Category
+
+// Tree returns the root node of the category tree.
+func (c CategoryMap) Root() *CategoryNode {
+	index := map[string]*CategoryNode{"": &CategoryNode{}}
+	for _, category := range c {
+		parent := index[category.ParentID]
+		if parent == nil {
+			parent = &CategoryNode{}
+			index[category.ParentID] = parent
+		}
+		node := index[category.ID]
+		if node == nil {
+			node = &CategoryNode{}
+			index[category.ID] = node
+		}
+		node.Category = category
+		parent.Children = append(parent.Children, node)
+		slice.Sort(parent.Children, func(i, j int) bool {
+			return parent.Children[i].Name < parent.Children[j].Name
+		})
+	}
+	return index[""]
+}
+
+// Path returns the path for the given category, or nil if it can't be
+// resolved.
+func (c CategoryMap) Path(id string) CategoryPath {
+	var path CategoryPath
+	for id != "" {
+		if category := c[id]; category == nil {
+			return nil
+		} else {
+			path = append([]*Category{category}, path...)
+			id = category.ParentID
+		}
+	}
+	return path
 }
