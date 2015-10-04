@@ -118,7 +118,6 @@ func cmdLs(d db.DB, categoryS string, asc bool) {
 	}
 }
 
-// TODO: manual testing
 func cmdEdit(d db.DB, id string) {
 	var (
 		entry *db.Entry
@@ -248,7 +247,7 @@ func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
 	} else if err != nil {
 		fatal(err)
 	}
-	// @TODO move logic into db pkg
+	// @TODO move logic into separate function
 	now := time.Now()
 	reportItr := datetime.NewIterator(entry.Start, duration, false, firstDay)
 	report := &Report{Duration: duration}
