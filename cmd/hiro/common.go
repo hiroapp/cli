@@ -15,6 +15,8 @@ import (
 	"github.com/hiroapp/cli/table"
 )
 
+const categorySeparator = ":"
+
 var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{
 	"now":  func() time.Time { return time.Now().Truncate(time.Second) },
 	"join": strings.Join,
@@ -23,7 +25,7 @@ var tmpl = template.Must(template.New("entry").Funcs(template.FuncMap{
 	},
 }).Parse(strings.TrimSpace(`
 Id:       {{.Entry.ID}}
-Category: {{join .Entry.Category ":"}}
+Category: {{.Category}}
 Start:    {{format .Entry.Start}}
 {{if not .HideEnd}}End:      {{if .Entry.End.IsZero}}{{else}}{{format .Entry.End}}{{end}}
 {{end}}{{if not .HideDuration}}Duration: {{.Entry.Duration now}}
@@ -32,15 +34,16 @@ Start:    {{format .Entry.Start}}
 {{end}}
 `)))
 
-func FprintEntry(w io.Writer, e *db.Entry, m PrintMask) error {
+func FprintEntry(w io.Writer, e *db.Entry, path db.CategoryPath, m PrintMask) error {
 	return tmpl.Execute(w, map[string]interface{}{
 		"Entry":        e,
 		"HideDuration": m&PrintHideDuration > 0,
 		"HideEnd":      m&PrintHideEnd > 0,
+		"Category":     FormatCategory(path),
 	})
 }
 
-func FprintIterator(w io.Writer, itr db.Iterator, m PrintMask) error {
+func FprintIterator(w io.Writer, itr db.Iterator, categories db.CategoryMap, m PrintMask) error {
 	for first := true; ; first = false {
 		if entry, err := itr.Next(); err == io.EOF {
 			return nil
@@ -56,11 +59,19 @@ func FprintIterator(w io.Writer, itr db.Iterator, m PrintMask) error {
 					return err
 				}
 			}
-			if err := FprintEntry(w, entry, m); err != nil {
+			if err := FprintEntry(w, entry, categories.Path(entry.CategoryID), m); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func FormatCategory(path db.CategoryPath) string {
+	names := make([]string, len(path))
+	for i, category := range path {
+		names[i] = category.Name
+	}
+	return strings.Join(names, categorySeparator)
 }
 
 type PrintMask int
@@ -216,7 +227,7 @@ func ParseCategory(category string) []string {
 	if category == "" {
 		return nil
 	}
-	return strings.Split(category, ":")
+	return strings.Split(category, categorySeparator)
 }
 
 func FormatReport(r *Report) string {
