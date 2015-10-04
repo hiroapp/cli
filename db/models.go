@@ -163,3 +163,18 @@ func (c CategoryMap) Root() *CategoryNode {
 	}
 	return index[""]
 }
+
+// Path returns the path for the given category, or nil if it can't be
+// resolved.
+func (c CategoryMap) Path(id string) CategoryPath {
+	var path CategoryPath
+	for id != "" {
+		if category := c[id]; category == nil {
+			return nil
+		} else {
+			path = append([]*Category{category}, path...)
+			id = category.ParentID
+		}
+	}
+	return path
+}

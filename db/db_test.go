@@ -231,9 +231,65 @@ func TestCategoryMap_Root(t *testing.T) {
 			},
 		},
 	}
+
 	for _, test := range tests {
 		got := test.Map.Root()
 		if diff := pretty.Compare(got, test.Root); diff != "" {
+			t.Errorf("test %q: %s", test.Name, diff)
+		}
+	}
+}
+
+func TestCategoryMap_Path(t *testing.T) {
+	tests := []struct {
+		Name string
+		Map  CategoryMap
+		ID   string
+		Path CategoryPath
+	}{
+		{
+			Name: "empty map",
+			ID:   "3",
+		},
+		{
+			Name: "simple lookup",
+			Map: CategoryMap{
+				"1": &Category{ID: "1", Name: "a"},
+				"2": &Category{ID: "2", Name: "b"},
+			},
+			ID: "2",
+			Path: CategoryPath{
+				&Category{ID: "2", Name: "b"},
+			},
+		},
+		{
+			Name: "not found",
+			Map: CategoryMap{
+				"1": &Category{ID: "1", Name: "a"},
+			},
+			ID: "2",
+		},
+		{
+			Name: "nested",
+			Map: CategoryMap{
+				"1": &Category{ID: "1", Name: "a"},
+				"2": &Category{ID: "2", Name: "b", ParentID: "1"},
+				"3": &Category{ID: "3", Name: "c", ParentID: "2"},
+				"4": &Category{ID: "4", Name: "d", ParentID: "1"},
+				"5": &Category{ID: "5", Name: "e"},
+			},
+			ID: "3",
+			Path: CategoryPath{
+				&Category{ID: "1", Name: "a"},
+				&Category{ID: "2", Name: "b", ParentID: "1"},
+				&Category{ID: "3", Name: "c", ParentID: "2"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		path := test.Map.Path(test.ID)
+		if diff := pretty.Compare(path, test.Path); diff != "" {
 			t.Errorf("test %q: %s", test.Name, diff)
 		}
 	}
