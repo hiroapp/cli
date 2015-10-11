@@ -178,7 +178,7 @@ func cmdRm(d db.DB, id string) {
 }
 
 func cmdSummary(d db.DB, periodS, firstDayS string) {
-	period, err := datetime.ParseDuration(periodS)
+	period, err := datetime.ParsePeriod(periodS)
 	if err != nil {
 		fatal(err)
 	}
@@ -221,12 +221,12 @@ func cmdSummary(d db.DB, periodS, firstDayS string) {
 	}
 }
 
-func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
-	duration, err := datetime.ParseDuration(durationS)
+func cmdReport(d db.DB, categoryS, periodS, firstDayS string) {
+	period, err := datetime.ParsePeriod(periodS)
 	if err != nil {
 		fatal(err)
-	} else if duration == datetime.Day {
-		fatal(errors.New("bad duration: day"))
+	} else if period == datetime.Day {
+		fatal(errors.New("bad period: day"))
 	}
 	firstDay, err := datetime.ParseWeekday(firstDayS)
 	if err != nil {
@@ -249,8 +249,8 @@ func cmdReport(d db.DB, categoryS, durationS, firstDayS string) {
 	}
 	// @TODO move logic into separate function
 	now := time.Now()
-	reportItr := datetime.NewIterator(entry.Start, duration, false, firstDay)
-	report := &Report{Duration: duration}
+	reportItr := datetime.NewIterator(entry.Start, period, false, firstDay)
+	report := &Report{Duration: period}
 	report.From, report.To = reportItr.Next()
 	dayItr := datetime.NewIterator(report.To, datetime.Day, false, firstDay)
 	day := &ReportDay{}
@@ -288,7 +288,7 @@ outer:
 			day.From, day.To = dayItr.Next()
 			if day.To.Before(report.From) {
 				fmt.Fprint(os.Stdout, FormatReport(report))
-				report = &Report{Duration: duration}
+				report = &Report{Duration: period}
 				report.From, report.To = reportItr.Next()
 			}
 			report.Days = append([]*ReportDay{day}, report.Days...)

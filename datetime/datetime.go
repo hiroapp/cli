@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// ParseDuration returns the Duration for s, or an error.
-func ParseDuration(s string) (Duration, error) {
+// ParsePeriod returns the Period for s, or an error.
+func ParsePeriod(s string) (Period, error) {
 	switch strings.ToLower(s) {
 	case "day":
 		return Day, nil
@@ -20,18 +20,17 @@ func ParseDuration(s string) (Duration, error) {
 	case "year":
 		return Year, nil
 	default:
-		return 0, fmt.Errorf("bad duration: %s", s)
+		return 0, fmt.Errorf("bad period: %s", s)
 	}
 }
 
-// Duration holds a calendar duration unit which does not
-// have a fixed time.Duration due to leap seconds, leap
-// years, days per month, etc.
-type Duration int
+// Period holds a calendar period unit which does not have a fixed
+// time.Period due to leap seconds, leap years, days per month, etc.
+type Period int
 
 const (
 	// Day represents a calendar day.
-	Day Duration = iota
+	Day Period = iota
 	// Day represents a calendar week.
 	Week
 	// Month represents a calendar month.
@@ -40,18 +39,18 @@ const (
 	Year
 )
 
-func NewIterator(cursor time.Time, duration Duration, asc bool, firstWeekday time.Weekday) *Iterator {
+func NewIterator(cursor time.Time, period Period, asc bool, firstWeekday time.Weekday) *Iterator {
 	return &Iterator{
-		cursor:       normalizeCursor(cursor, duration, firstWeekday),
-		duration:     duration,
+		cursor:       normalizeCursor(cursor, period, firstWeekday),
+		period:       period,
 		asc:          asc,
 		firstWeekday: firstWeekday,
 	}
 }
 
-func normalizeCursor(cursor time.Time, duration Duration, firstDay time.Weekday) time.Time {
+func normalizeCursor(cursor time.Time, period Period, firstDay time.Weekday) time.Time {
 	loc := cursor.Location()
-	switch duration {
+	switch period {
 	case Day, Week:
 		cursor = time.Date(cursor.Year(), cursor.Month(), cursor.Day(), 0, 0, 0, 0, loc)
 	case Month:
@@ -59,7 +58,7 @@ func normalizeCursor(cursor time.Time, duration Duration, firstDay time.Weekday)
 	case Year:
 		cursor = time.Date(cursor.Year(), 1, 1, 0, 0, 0, 0, loc)
 	}
-	if duration == Week {
+	if period == Week {
 		for cursor.Weekday() != firstDay {
 			cursor = cursor.AddDate(0, 0, -1)
 		}
@@ -69,7 +68,7 @@ func normalizeCursor(cursor time.Time, duration Duration, firstDay time.Weekday)
 
 type Iterator struct {
 	cursor       time.Time
-	duration     Duration
+	period       Period
 	asc          bool
 	firstWeekday time.Weekday
 }
@@ -82,7 +81,7 @@ func (i *Iterator) Next() (time.Time, time.Time) {
 	if !i.asc {
 		m = -1
 	}
-	switch i.duration {
+	switch i.period {
 	case Day:
 		next = i.cursor.AddDate(0, 0, m*1)
 		from = i.cursor

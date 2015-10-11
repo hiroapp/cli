@@ -108,7 +108,7 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 }
 
-func PeriodHeadline(from, to time.Time, period datetime.Duration) string {
+func PeriodHeadline(from, to time.Time, period datetime.Period) string {
 	switch period {
 	case datetime.Day:
 		return fmt.Sprintf("%s", from.Format("2006-01-02: Monday"))
@@ -180,7 +180,7 @@ type Report struct {
 	From time.Time
 	To   time.Time
 	// @TODO Duration is an unfortunate name, maybe rename it
-	Duration datetime.Duration
+	Duration datetime.Period
 	Days     []*ReportDay
 }
 

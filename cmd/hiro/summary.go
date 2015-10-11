@@ -11,7 +11,7 @@ import (
 // the given period and firstDay of the week. If the period is datetime.Day,
 // it is is ignored. Callers are required to call Close once they are done
 // with the iterator.
-func NewSummaryIterator(d db.DB, period datetime.Duration, firstDay time.Weekday, now time.Time) (*SummaryIterator, error) {
+func NewSummaryIterator(d db.DB, period datetime.Period, firstDay time.Weekday, now time.Time) (*SummaryIterator, error) {
 	entries, err := d.Query(db.Query{})
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ type SummaryIterator struct {
 	entries  db.Iterator
 	entry    *db.Entry
 	periods  *datetime.Iterator
-	period   datetime.Duration
+	period   datetime.Period
 	firstDay time.Weekday
 }
 
